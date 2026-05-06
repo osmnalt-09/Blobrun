@@ -1,0 +1,2790 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BlobRun">
+  <meta name="theme-color" content="#04040f">
+  <title>🫧 BlobRun</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body, #root {
+      width:100%; height:100%;
+      background:#04040f;
+      overflow:hidden;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    body { position:fixed; inset:0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React + ReactDOM CDN -->
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <!-- Babel for JSX transform -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+  <script type="text/babel" data-presets="react">
+const { useEffect, useRef, useState, useCallback } = React;
+
+
+
+// ══════════════════════════════════════════════════════════
+// MÜZİK SİSTEMİ (Web Audio API - saf JS, lib yok)
+// ══════════════════════════════════════════════════════════
+const AudioMgr = {
+  ctx: null, vol: 0.35, playing: false, iv: null, mapKey: "forest",
+
+  // Her haritaya ozgu muzik tanimlari
+  TRACKS: {
+    forest: { bpm:300, melody:[523,587,659,784,659,587,523,0,523,659,784,880,784,659,523,0], bass:[130,165,196,165], type:"triangle", bassType:"sine",   hihat:true,  kick:true  },
+    cloud:  { bpm:340, melody:[880,988,1047,988,880,0,880,988,1047,1175,1047,0,880,784,698,0], bass:[220,247,262,247], type:"sine",     bassType:"sine",   hihat:false, kick:false },
+    desert: { bpm:280, melody:[349,392,440,392,349,330,294,0,349,392,440,494,440,392,349,0], bass:[87,98,110,98],   type:"sawtooth", bassType:"triangle",hihat:true,  kick:true  },
+    pipe:   { bpm:240, melody:[220,247,262,294,330,294,262,247,220,0,220,262,330,392,330,0], bass:[55,62,65,73],    type:"square",   bassType:"square",  hihat:true,  kick:true  },
+    ocean:  { bpm:360, melody:[659,784,880,784,659,587,523,587,659,784,988,880,784,659,587,0], bass:[164,196,220,196], type:"sine",   bassType:"sine",    hihat:false, kick:false },
+    space:  { bpm:400, melody:[440,494,523,587,659,587,523,494,440,0,440,523,659,784,659,0], bass:[110,123,130,147], type:"triangle",bassType:"triangle",hihat:false, kick:true  },
+    lava:   { bpm:220, melody:[196,220,247,294,330,294,247,220,196,175,165,175,196,220,247,0], bass:[49,55,62,55],  type:"sawtooth", bassType:"sawtooth",hihat:true,  kick:true  },
+    snow:   { bpm:380, melody:[1047,988,880,784,698,784,880,988,1047,0,1047,880,784,698,659,0], bass:[261,247,220,247], type:"triangle",bassType:"sine",  hihat:false, kick:false },
+    city:   { bpm:260, melody:[587,659,784,880,784,659,587,523,587,659,880,988,880,784,659,0], bass:[146,164,196,164], type:"square", bassType:"square",  hihat:true,  kick:true  },
+    chaos:  { bpm:200, melody:[523,659,784,1047,784,659,523,392,523,784,1047,1318,1047,784,523,0], bass:[65,82,110,82], type:"sawtooth",bassType:"sawtooth",hihat:true, kick:true },
+    boss:   { bpm:210, melody:[196,175,165,147,165,175,196,0,220,196,175,165,175,196,220,0], bass:[49,44,41,37],   type:"sawtooth", bassType:"sawtooth",hihat:true,  kick:true  },
+    menu:   { bpm:300, melody:[523,587,659,698,784,698,659,587,523,523,587,659,523,0,523,659], bass:[130,147,165,147], type:"triangle",bassType:"sine",   hihat:true,  kick:true  },
+    boss0:  { bpm:260, melody:[523,494,440,392,440,494,523,0,587,523,494,440,494,523,587,0], bass:[130,123,110,98],  type:"sawtooth",bassType:"sawtooth",hihat:true, kick:true },
+    boss1:  { bpm:240, melody:[880,784,698,659,698,784,880,0,988,880,784,698,784,880,988,0], bass:[220,196,175,165], type:"square",  bassType:"sawtooth",hihat:true, kick:true },
+    boss2:  { bpm:225, melody:[440,392,349,330,349,392,440,0,494,440,392,349,392,440,494,0], bass:[110,98,87,82],   type:"sawtooth",bassType:"square",  hihat:true, kick:true },
+    boss3:  { bpm:210, melody:[330,294,262,247,262,294,330,0,370,330,294,262,294,330,370,0], bass:[82,73,65,62],    type:"square",  bassType:"square",  hihat:true, kick:true },
+    boss4:  { bpm:200, melody:[294,262,247,220,247,262,294,0,330,294,262,247,262,294,330,0], bass:[73,65,62,55],    type:"sawtooth",bassType:"sawtooth",hihat:true, kick:true },
+    boss5:  { bpm:190, melody:[220,196,175,165,175,196,220,0,247,220,196,175,196,220,247,0], bass:[55,49,44,41],    type:"sawtooth",bassType:"sawtooth",hihat:true, kick:true },
+    boss6:  { bpm:180, melody:[196,175,165,147,165,175,196,0,220,196,175,165,175,196,220,0], bass:[49,44,41,37],    type:"sawtooth",bassType:"sawtooth",hihat:true, kick:true },
+    boss7:  { bpm:170, melody:[175,165,147,131,147,165,175,0,196,175,165,147,165,175,196,0], bass:[44,41,37,33],    type:"sawtooth",bassType:"sawtooth",hihat:true, kick:true },
+    boss8:  { bpm:160, melody:[165,147,131,123,131,147,165,0,175,165,147,131,147,165,175,0], bass:[41,37,33,31],    type:"sawtooth",bassType:"sawtooth",hihat:true, kick:true },
+    boss9:  { bpm:145, melody:[147,131,123,110,123,131,147,0,165,147,131,123,131,147,165,0], bass:[37,33,31,28],    type:"sawtooth",bassType:"sawtooth",hihat:true, kick:true },
+  },
+
+  init() {
+    if (this.ctx) return;
+    try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+  },
+
+  note(freq, type, dur, vol, delay) {
+    if (!this.ctx || vol <= 0) return;
+    const d = delay || 0;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.connect(g); g.connect(this.ctx.destination);
+    o.type = type; o.frequency.value = freq;
+    const t = this.ctx.currentTime + d;
+    g.gain.setValueAtTime(vol * this.vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.start(t); o.stop(t + dur + 0.05);
+  },
+
+  startMusic(mapKey) {
+    this.stopMusic();
+    if (!this.ctx) return;
+    this.mapKey = mapKey || "menu";
+    const tk = this.TRACKS[this.mapKey] || this.TRACKS.menu;
+    this.playing = true;
+    let step = 0;
+    const interval = tk.bpm;
+    this.iv = setInterval(() => {
+      if (!this.playing) return;
+      const mel = tk.melody[step % tk.melody.length];
+      if (mel > 0) this.note(mel, tk.type, (interval / 1000) * 0.75, 0.15);
+      const b = tk.bass[Math.floor(step / 2) % tk.bass.length];
+      if (step % 2 === 0) this.note(b, tk.bassType, (interval / 1000) * 1.5, 0.13);
+      // Davul (kick)
+      if (tk.kick) {
+        if (step % 8 === 0) this.note(80, "sine", 0.07, 0.22);
+        if (step % 8 === 4) this.note(100, "sine", 0.05, 0.16);
+      }
+      // Hi-hat
+      if (tk.hihat && step % 4 === 2) this.note(900, "square", 0.02, 0.07);
+      // Boss muzigi icin ekstra bas vurusu
+      if (this.mapKey === "boss" && step % 4 === 0) this.note(55, "sawtooth", 0.1, 0.18);
+      // Kaos: rastgele ek nota
+      if (this.mapKey === "chaos" && Math.random() < 0.25) {
+        const cr = [196, 247, 330, 415, 523, 659][Math.floor(Math.random()*6)];
+        this.note(cr, "square", 0.08, 0.06);
+      }
+      step++;
+    }, interval);
+  },
+
+  stopMusic() {
+    this.playing = false;
+    if (this.iv) { clearInterval(this.iv); this.iv = null; }
+  },
+
+  sfx(type) {
+    if (!this.ctx) return;
+    const s = {
+      jump:   () => { this.note(330,"sine",0.12,0.18); this.note(440,"sine",0.06,0.12,0.08); },
+      land:   () => this.note(120,"sine",0.07,0.14),
+      slash:  () => { this.note(880,"square",0.08,0.18); this.note(660,"sawtooth",0.06,0.14,0.06); },
+      hit:    () => { this.note(200,"sawtooth",0.1,0.22); this.note(150,"sine",0.05,0.12,0.08); },
+      die:    () => { this.note(220,"sawtooth",0.3,0.25); this.note(110,"sawtooth",0.2,0.22,0.15); },
+      win:    () => { [523,659,784,1047].forEach((f,i)=>this.note(f,"triangle",0.22,0.2,i*0.12)); },
+      boss:   () => { this.note(60,"sawtooth",0.25,0.28); this.note(90,"square",0.1,0.2,0.1); },
+      unlock: () => { [659,784,1047].forEach((f,i)=>this.note(f,"triangle",0.18,0.18,i*0.09)); },
+      save:   () => { [523,659,784].forEach((f,i)=>this.note(f,"triangle",0.15,0.16,i*0.08)); },
+      save:   () => { [523,659,784].forEach((f,i)=>this.note(f,"triangle",0.15,0.16,i*0.08)); },
+    };
+    if (s[type]) s[type]();
+  },
+
+  setVol(v) { this.vol = v; },
+};
+
+
+// ══════════════════════════════════════════════════════════
+// PARA BİRİMİ & KOSTÜM SİSTEMİ
+// ══════════════════════════════════════════════════════════
+// Bölüm ödülleri
+function levelReward(lvId) {
+  if ((lvId+1) % 10 === 0) return 80 + lvId * 3;  // boss
+  return 20 + Math.floor(lvId * 1.5);
+}
+
+
+// ══════════════════════════════════════════════════════════
+// 30 ÖZEL GÜÇLÜ KAHRAMAN
+// ══════════════════════════════════════════════════════════
+const HEROES = [
+  // ── BAŞLANGIÇ (ücretsiz, erken açılanlar)
+  { id:0,  name:"Gölge Savaşçı",   emoji:"🌑", col:"#1e1b4b", glow:"#7c3aed", price:0,
+    unlock:"Başlangıç",  unlockLevel:-1,
+    power:"invisible",   powerName:"Görünmezlik",  powerEmoji:"👻",
+    powerDesc:"Boss seni görmez! 4 sn hasar almaz",
+    dur:240, cd:600, swordDmg:1, bossDmg:1 },
+  { id:1,  name:"Ateş Ustası",      emoji:"🔥", col:"#ef4444", glow:"#ff4500", price:200,
+    unlock:"Lv.5 tamamla",  unlockLevel:4,
+    power:"firesword",   powerName:"Ateş Kılıcı",  powerEmoji:"🔥",
+    powerDesc:"Kılıç boss'a 3x hasar verir! 5 sn",
+    dur:300, cd:500, swordDmg:3, bossDmg:2 },
+  { id:2,  name:"Buz Prensesi",     emoji:"❄️",  col:"#bae6fd", glow:"#0ea5e9", price:200,
+    unlock:"Lv.5 tamamla",  unlockLevel:4,
+    power:"freeze",      powerName:"Boss Dondur",   powerEmoji:"🧊",
+    powerDesc:"Boss 3 sn donar, hareket etmez!",
+    dur:180, cd:480, swordDmg:1, bossDmg:1 },
+  { id:3,  name:"Yıldırım Tanrı",   emoji:"⚡", col:"#fde047", glow:"#eab308", price:250,
+    unlock:"Lv.10 tamamla", unlockLevel:9,
+    power:"lightning",   powerName:"Yıldırım",      powerEmoji:"⚡",
+    powerDesc:"Uzaktan boss'a yıldırım çarpar!",
+    dur:1, cd:360, swordDmg:2, bossDmg:3 },
+  { id:4,  name:"Orman Koruyucu",   emoji:"🌿", col:"#22c55e", glow:"#16a34a", price:250,
+    unlock:"Lv.10 tamamla", unlockLevel:9,
+    power:"thorns",      powerName:"Diken Kalkan",  powerEmoji:"🌵",
+    powerDesc:"Mermiler geri döner! 4 sn",
+    dur:240, cd:500, swordDmg:1, bossDmg:2 },
+  // ── ORTA SEVİYE
+  { id:5,  name:"Ninja",            emoji:"🥷", col:"#0f172a", glow:"#6366f1", price:350,
+    unlock:"Lv.20 tamamla", unlockLevel:19,
+    power:"dash",        powerName:"Ninja Koşusu",  powerEmoji:"💨",
+    powerDesc:"Boss'un üzerinden ışık hızında geç! 3 vuruş",
+    dur:3, cd:420, swordDmg:2, bossDmg:2 },
+  { id:6,  name:"Uzay Kaptanı",     emoji:"🚀", col:"#818cf8", glow:"#6366f1", price:350,
+    unlock:"Lv.20 tamamla", unlockLevel:19,
+    power:"antigrav",    powerName:"Yer Çekimsiz",  powerEmoji:"🛸",
+    powerDesc:"5 sn uçarsın! Boss mermi ıskalamaz",
+    dur:300, cd:550, swordDmg:1, bossDmg:2 },
+  { id:7,  name:"Vampir",           emoji:"🧛", col:"#4c0519", glow:"#9f1239", price:400,
+    unlock:"Lv.25 tamamla", unlockLevel:24,
+    power:"lifesteal",   powerName:"Kan Emme",      powerEmoji:"🩸",
+    powerDesc:"Boss'a vurdukça ölümsüz olursun! 5 sn",
+    dur:300, cd:500, swordDmg:2, bossDmg:2 },
+  { id:8,  name:"Ejderha",          emoji:"🐉", col:"#dc2626", glow:"#b91c1c", price:400,
+    unlock:"Lv.25 tamamla", unlockLevel:24,
+    power:"firebreath",  powerName:"Ateş Nefesi",   powerEmoji:"🔥",
+    powerDesc:"Alev seli! Tüm minyonları yok eder",
+    dur:180, cd:480, swordDmg:2, bossDmg:3 },
+  { id:9,  name:"Deniz Kızı",       emoji:"🧜", col:"#06b6d4", glow:"#0891b2", price:400,
+    unlock:"Lv.30 tamamla", unlockLevel:29,
+    power:"wave",        powerName:"Dev Dalga",     powerEmoji:"🌊",
+    powerDesc:"Boss'u iter, mermilerini durdurur! 3 sn",
+    dur:180, cd:440, swordDmg:1, bossDmg:2 },
+  // ── İLERİ SEVİYE
+  { id:10, name:"Robot",            emoji:"🤖", col:"#64748b", glow:"#475569", price:500,
+    unlock:"Lv.35 tamamla", unlockLevel:34,
+    power:"shield",      powerName:"Kalkan",        powerEmoji:"🛡️",
+    powerDesc:"Boss hasarını 3 kez engeller!",
+    dur:3, cd:420, swordDmg:1, bossDmg:1 },
+  { id:11, name:"Büyücü",           emoji:"🧙", col:"#7c3aed", glow:"#6d28d9", price:500,
+    unlock:"Lv.35 tamamla", unlockLevel:34,
+    power:"slowtime",    powerName:"Zaman Yavaşlat",powerEmoji:"⏳",
+    powerDesc:"Boss ve mermiler yavaşlar! 4 sn",
+    dur:240, cd:520, swordDmg:1, bossDmg:2 },
+  { id:12, name:"Dedektif",         emoji:"🕵️", col:"#374151", glow:"#6b7280", price:500,
+    unlock:"Lv.40 tamamla", unlockLevel:39,
+    power:"reveal",      powerName:"Zayıf Nokta",   powerEmoji:"🎯",
+    powerDesc:"Boss'un zayıf noktasını bulur! 2x hasar 5 sn",
+    dur:300, cd:480, swordDmg:2, bossDmg:2 },
+  { id:13, name:"Kahraman",         emoji:"🦸", col:"#3b82f6", glow:"#2563eb", price:550,
+    unlock:"Lv.40 tamamla", unlockLevel:39,
+    power:"superstrength",powerName:"Süper Güç",    powerEmoji:"💪",
+    powerDesc:"Tüm saldırılar 4x! 3 sn mega güç",
+    dur:180, cd:600, swordDmg:4, bossDmg:4 },
+  { id:14, name:"Kara Delik",       emoji:"🌑", col:"#0f0a1e", glow:"#4c1d95", price:550,
+    unlock:"Lv.45 tamamla", unlockLevel:44,
+    power:"blackhole",   powerName:"Karadelik",     powerEmoji:"🕳️",
+    powerDesc:"Boss'u emer, kaçamaz! 3 sn sabit",
+    dur:180, cd:540, swordDmg:1, bossDmg:3 },
+  // ── EFSANE SEVİYE
+  { id:15, name:"Kaos Lordu",       emoji:"☠️",  col:"#7e22ce", glow:"#9333ea", price:700,
+    unlock:"Lv.50 tamamla", unlockLevel:49,
+    power:"chaos",       powerName:"Kaos Patlaması",powerEmoji:"💥",
+    powerDesc:"Boss'u hasar alanına iter, 5 hasar!",
+    dur:1, cd:480, swordDmg:5, bossDmg:5 },
+  { id:16, name:"Gökkuşağı",        emoji:"🌈", col:"#f472b6", glow:"#ec4899", price:700,
+    unlock:"Lv.50 tamamla", unlockLevel:49,
+    power:"rainbow",     powerName:"Gökkuşağı Tuzağı",powerEmoji:"🌈",
+    powerDesc:"Boss mermileri renge döner, zararsız!",
+    dur:300, cd:500, swordDmg:1, bossDmg:2 },
+  { id:17, name:"Lav Tanrısı",      emoji:"🌋", col:"#b91c1c", glow:"#dc2626", price:750,
+    unlock:"Lv.55 tamamla", unlockLevel:54,
+    power:"lavapool",    powerName:"Lav Havuzu",    powerEmoji:"🫧",
+    powerDesc:"Boss ayağının altı lav! Sürekli hasar",
+    dur:360, cd:560, swordDmg:2, bossDmg:1 },
+  { id:18, name:"Boran Kral",       emoji:"🌨️",  col:"#e0f2fe", glow:"#7dd3fc", price:750,
+    unlock:"Lv.55 tamamla", unlockLevel:54,
+    power:"blizzard",    powerName:"Buz Fırtınası", powerEmoji:"❄️",
+    powerDesc:"Mermi yağmuru dondurur! 4 sn engel yok",
+    dur:240, cd:520, swordDmg:1, bossDmg:2 },
+  { id:19, name:"Neon İblis",       emoji:"👾", col:"#ec4899", glow:"#db2777", price:800,
+    unlock:"Lv.60 tamamla", unlockLevel:59,
+    power:"laserwall",   powerName:"Lazer Duvarı",  powerEmoji:"🔴",
+    powerDesc:"Boss mermi duvara çarpar! 5 sn",
+    dur:300, cd:540, swordDmg:2, bossDmg:2 },
+  // ── ULTRA EFSANE
+  { id:20, name:"Zaman Yolcusu",    emoji:"⏱️",  col:"#0ea5e9", glow:"#0284c7", price:900,
+    unlock:"Lv.65 tamamla", unlockLevel:64,
+    power:"timeloop",    powerName:"Zaman Döngüsü", powerEmoji:"⏰",
+    powerDesc:"Öldüğünde 5 sn geri döner! 1 kez",
+    dur:1, cd:9999, swordDmg:1, bossDmg:2 },
+  { id:21, name:"Evren Tanrısı",    emoji:"🌌", col:"#1e1b4b", glow:"#4f46e5", price:900,
+    unlock:"Lv.70 tamamla", unlockLevel:69,
+    power:"universe",    powerName:"Evren Patlaması",powerEmoji:"✨",
+    powerDesc:"Boss maksimum hasar! Tüm mermileri yok eder",
+    dur:1, cd:600, swordDmg:99, bossDmg:99 },
+  { id:22, name:"Altın Savaşçı",    emoji:"✨", col:"#fbbf24", glow:"#f59e0b", price:950,
+    unlock:"Lv.70 tamamla", unlockLevel:69,
+    power:"goldshield",  powerName:"Altın Zırh",    powerEmoji:"🥇",
+    powerDesc:"6 sn her türlü hasar sıfır!",
+    dur:360, cd:600, swordDmg:2, bossDmg:3 },
+  { id:23, name:"Karanlık Kral",    emoji:"👑", col:"#0c0a09", glow:"#57534e", price:1000,
+    unlock:"Lv.75 tamamla", unlockLevel:74,
+    power:"darkness",    powerName:"Karanlık",      powerEmoji:"🌑",
+    powerDesc:"Boss körleşir! 5 sn nereye ateş edeceğini bilmez",
+    dur:300, cd:540, swordDmg:2, bossDmg:2 },
+  { id:24, name:"Rüzgar Ustası",    emoji:"🌪️",  col:"#a3e635", glow:"#65a30d", price:1000,
+    unlock:"Lv.75 tamamla", unlockLevel:74,
+    power:"tornado",     powerName:"Kasırga",       powerEmoji:"🌀",
+    powerDesc:"Tüm mermileri savurur! 4 sn",
+    dur:240, cd:480, swordDmg:1, bossDmg:3 },
+  // ── EFSANELER EFSANESI (sadece 100. bölüm)
+  { id:25, name:"Ölümsüz",          emoji:"💫", col:"#f0fdf4", glow:"#bbf7d0", price:1200,
+    unlock:"Lv.80 tamamla", unlockLevel:79,
+    power:"immortal",    powerName:"Ölümsüzlük",    powerEmoji:"💎",
+    powerDesc:"10 sn ölemezsin! Boss bile öldüremez",
+    dur:600, cd:9999, swordDmg:2, bossDmg:2 },
+  { id:26, name:"Kaos Tanrısı Jr",  emoji:"🔱", col:"#6d28d9", glow:"#7c3aed", price:1200,
+    unlock:"Lv.85 tamamla", unlockLevel:84,
+    power:"chaos",       powerName:"Kaos Patlaması",powerEmoji:"💥",
+    powerDesc:"Boss'a 5 hasar + tüm mermileri sav! 1 kez",
+    dur:1, cd:9999, swordDmg:5, bossDmg:5 },
+  { id:27, name:"Anka Kuşu",        emoji:"🦅", col:"#ff6b35", glow:"#f97316", price:1300,
+    unlock:"Lv.90 tamamla", unlockLevel:89,
+    power:"shield",      powerName:"Anka Kalkanı",  powerEmoji:"🛡️",
+    powerDesc:"3 mermiyi engeller! Boss hasarı almaz",
+    dur:3, cd:420, swordDmg:2, bossDmg:3 },
+  { id:28, name:"Tam Güç",          emoji:"💥", col:"#ef4444", glow:"#dc2626", price:1400,
+    unlock:"Lv.95 tamamla", unlockLevel:94,
+    power:"overkill",    powerName:"Tam Güç",       powerEmoji:"🎆",
+    powerDesc:"Boss anında 5 hasar alır! Tek kullanım",
+    dur:1, cd:9999, swordDmg:99, bossDmg:5 },
+  { id:29, name:"Efsane Kahraman",  emoji:"🌟", col:"#ffd700", glow:"#fbbf24", price:0,
+    unlock:"100 bölüm bitir", unlockLevel:99,
+    power:"superstrength", powerName:"Altın Kılıç",  powerEmoji:"⚔️",
+    powerDesc:"5 sn boyunca kılıç 5x hasar verir! Boss korkusu!",
+    dur:300, cd:600, swordDmg:5, bossDmg:5 },
+];
+
+// Kahraman kilit kontrolü
+function isHeroUnlocked(hero, best) {
+  if (hero.unlockLevel < 0) return true;
+  if (hero.price === 0 && hero.unlockLevel === 99) return Object.keys(best).length >= 99;
+  return Object.keys(best).some(k => parseInt(k) >= hero.unlockLevel);
+}
+
+// Güç efekti çiz
+function drawPowerFX(ctx, s, hero, W, H) {
+  if (!s.powerActive || !hero) return;
+  const t = s.tick, rem = s.powerRem;
+  const px = s.px, py = s.py;
+  switch(hero.power) {
+    case "invisible":
+      // Görünmezlik: halka efekti
+      ctx.strokeStyle = "rgba(168,85,247,0.4)"; ctx.lineWidth = 2;
+      ctx.shadowColor = "#7c3aed"; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.arc(px-s.camX, py, 40+Math.sin(t*0.15)*6, 0, Math.PI*2); ctx.stroke();
+      ctx.shadowBlur = 0; break;
+    case "firesword":
+      for(let i=0;i<5;i++){
+        const fa=(t*0.2+i*1.26)%(Math.PI*2);
+        ctx.fillStyle=`hsl(${t*8+i*20},100%,60%)`;
+        ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=10;
+        ctx.beginPath(); ctx.arc(px-s.camX+Math.cos(fa)*26, py+Math.sin(fa)*20, 4, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur=0;
+      } break;
+    case "freeze":
+      ctx.strokeStyle="rgba(186,230,253,0.7)"; ctx.lineWidth=2; ctx.shadowColor="#7dd3fc"; ctx.shadowBlur=12;
+      for(let r=20;r<70;r+=16){ctx.beginPath();ctx.arc(px-s.camX,py,r+Math.sin(t*0.1+r)*3,0,Math.PI*2);ctx.stroke();}
+      ctx.shadowBlur=0; break;
+    case "lightning":
+      ctx.strokeStyle="#fde047"; ctx.lineWidth=3; ctx.shadowColor="#fde047"; ctx.shadowBlur=20;
+      ctx.beginPath(); ctx.moveTo(px-s.camX, py-40); ctx.lineTo(px-s.camX+Math.sin(t*0.3)*8,py-20); ctx.lineTo(px-s.camX,py); ctx.stroke();
+      ctx.shadowBlur=0; break;
+    case "shield": case "goldshield":
+      const sc=hero.power==="goldshield"?"#fbbf24":"#60a5fa";
+      ctx.strokeStyle=sc; ctx.lineWidth=4; ctx.shadowColor=sc; ctx.shadowBlur=18;
+      ctx.globalAlpha=0.6+Math.sin(t*0.12)*0.25;
+      ctx.beginPath(); ctx.arc(px-s.camX, py, 38+Math.sin(t*0.1)*4, 0, Math.PI*2); ctx.stroke();
+      ctx.globalAlpha=1; ctx.shadowBlur=0; break;
+    case "antigrav":
+      ctx.fillStyle="rgba(99,102,241,0.3)"; ctx.shadowColor="#6366f1"; ctx.shadowBlur=12;
+      ctx.beginPath(); ctx.arc(px-s.camX, py, 32, 0, Math.PI*2); ctx.fill();
+      ctx.shadowBlur=0; break;
+    case "dash":
+      ctx.fillStyle="rgba(99,102,241,0.35)";
+      for(let i=1;i<=4;i++) ctx.fillRect(px-s.camX-i*14*s.facing-8, py-14, 12, 28);
+      break;
+    case "chaos": case "overkill":
+      for(let i=0;i<8;i++){
+        const ca=(i/8)*Math.PI*2;
+        const cr=30+Math.random()*20;
+        ctx.fillStyle=`hsl(${t*15+i*45},100%,60%)`;
+        ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=14;
+        ctx.beginPath(); ctx.arc(px-s.camX+Math.cos(ca)*cr,py+Math.sin(ca)*cr,5,0,Math.PI*2); ctx.fill();
+        ctx.shadowBlur=0;
+      } break;
+    case "universe":
+      ctx.strokeStyle=`hsl(${t*4},80%,65%)`; ctx.lineWidth=3; ctx.shadowColor="white"; ctx.shadowBlur=22;
+      ctx.beginPath(); ctx.arc(px-s.camX,py,50+Math.sin(t*0.12)*8,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(px-s.camX,py,32,0,Math.PI*2); ctx.stroke();
+      ctx.shadowBlur=0; break;
+
+    default: break;
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════
+// GÜNLÜK GÖREVLER
+// ══════════════════════════════════════════════════════════
+const DAILY_QUESTS = [
+  { id:"finish3",  desc:"3 bölüm tamamla",        target:3,  reward:150, icon:"🏃" },
+  { id:"boss1",    desc:"Bir boss yarat",           target:1,  reward:300, icon:"👹" },
+  { id:"combo10",  desc:"10 combo ulaş",            target:10, reward:200, icon:"🔥" },
+  { id:"nohit",    desc:"Hasar almadan bölüm bit",  target:1,  reward:250, icon:"🛡️"  },
+  { id:"sword20",  desc:"20 kılıç vur",             target:20, reward:180, icon:"⚔️"  },
+  { id:"dash30",   desc:"30 kez dash yap",          target:30, reward:160, icon:"💨" },
+  { id:"doublejump",desc:"50 çift zıpla",           target:50, reward:140, icon:"⬆️"  },
+  { id:"coins300", desc:"300 coin topla",           target:300,reward:100, icon:"🪙" },
+];
+
+function getDailyQuestsForToday() {
+  const day = Math.floor(Date.now() / 86400000);
+  const idxs = [day%8, (day+3)%8, (day+5)%8];
+  return idxs.map(i => ({ ...DAILY_QUESTS[i], progress:0, done:false }));
+}
+
+// 54 kostüm tanımı
+const COSTUMES = [
+  // ── TEMEL (0-9)
+  { id:0,  name:"Varsayılan",   price:0,    rarity:"common",    col:"#ff6b6b", hat:null,          eyes:"normal", special:null       },
+  { id:1,  name:"Orman Ruhu",   price:50,   rarity:"common",    col:"#4ade80", hat:"leaf",        eyes:"normal", special:null       },
+  { id:2,  name:"Bulut Beyi",   price:50,   rarity:"common",    col:"#93c5fd", hat:"cloud",       eyes:"normal", special:null       },
+  { id:3,  name:"Çöl Kumu",     price:50,   rarity:"common",    col:"#fbbf24", hat:"cactus",      eyes:"normal", special:null       },
+  { id:4,  name:"Derin Su",     price:60,   rarity:"common",    col:"#22d3ee", hat:"bubble",      eyes:"normal", special:null       },
+  { id:5,  name:"Çelik Kalkan", price:60,   rarity:"common",    col:"#94a3b8", hat:"helmet",      eyes:"normal", special:null       },
+  { id:6,  name:"Nar Kırmızı",  price:60,   rarity:"common",    col:"#f87171", hat:null,          eyes:"angry",  special:null       },
+  { id:7,  name:"Buz Prensi",   price:70,   rarity:"common",    col:"#bae6fd", hat:"snowflake",   eyes:"normal", special:null       },
+  { id:8,  name:"Neon Işık",    price:70,   rarity:"common",    col:"#f472b6", hat:null,          eyes:"neon",   special:null       },
+  { id:9,  name:"Mor Kaos",     price:80,   rarity:"common",    col:"#a855f7", hat:null,          eyes:"spiral", special:null       },
+  // ── NADIR (10-19)
+  { id:10, name:"Şef Aşçı",     price:120,  rarity:"rare",      col:"#fde047", hat:"chef",        eyes:"happy",  special:null       },
+  { id:11, name:"Viking",        price:130,  rarity:"rare",      col:"#fb923c", hat:"viking",      eyes:"angry",  special:null       },
+  { id:12, name:"Uzay Kaptanı", price:140,  rarity:"rare",      col:"#818cf8", hat:"astronaut",   eyes:"visor",  special:null       },
+  { id:13, name:"Ninja",         price:150,  rarity:"rare",      col:"#1e293b", hat:"ninja",       eyes:"slit",   special:null       },
+  { id:14, name:"Korsan",        price:150,  rarity:"rare",      col:"#854d0e", hat:"pirate",      eyes:"patch",  special:null       },
+  { id:15, name:"Kovboy",        price:160,  rarity:"rare",      col:"#d97706", hat:"cowboy",      eyes:"normal", special:null       },
+  { id:16, name:"Sihirbaz",      price:170,  rarity:"rare",      col:"#7c3aed", hat:"wizard",      eyes:"star",   special:null       },
+  { id:17, name:"Dedektif",      price:170,  rarity:"rare",      col:"#374151", hat:"detective",   eyes:"mono",   special:null       },
+  { id:18, name:"Prenses",       price:180,  rarity:"rare",      col:"#f9a8d4", hat:"crown",       eyes:"happy",  special:null       },
+  { id:19, name:"Robot",         price:180,  rarity:"rare",      col:"#64748b", hat:"antenna",     eyes:"led",    special:null       },
+  // ── EPİK (20-29)
+  { id:20, name:"Ejderha",       price:280,  rarity:"epic",      col:"#dc2626", hat:"horns",       eyes:"fire",   special:"flames"   },
+  { id:21, name:"Denizci Tanrı", price:290,  rarity:"epic",      col:"#0891b2", hat:"trident",     eyes:"wave",   special:"bubbles"  },
+  { id:22, name:"Şimşek",        price:300,  rarity:"epic",      col:"#fde047", hat:"lightning",   eyes:"spark",  special:"electric" },
+  { id:23, name:"Buz Tanrısı",   price:310,  rarity:"epic",      col:"#e0f2fe", hat:"icecrystal",  eyes:"cold",   special:"frost"    },
+  { id:24, name:"Lav Canavarı",  price:320,  rarity:"epic",      col:"#ef4444", hat:"volcanic",    eyes:"glow",   special:"lava"     },
+  { id:25, name:"Gölge",         price:330,  rarity:"epic",      col:"#0f172a", hat:null,          eyes:"red",    special:"shadow"   },
+  { id:26, name:"Altın Kral",    price:340,  rarity:"epic",      col:"#ffd700", hat:"goldcrown",   eyes:"gold",   special:"sparkle"  },
+  { id:27, name:"Zehirli",       price:350,  rarity:"epic",      col:"#84cc16", hat:null,          eyes:"toxic",  special:"poison"   },
+  { id:28, name:"Galaktik",      price:360,  rarity:"epic",      col:"#a78bfa", hat:"galaxy",      eyes:"cosmos", special:"stars"    },
+  { id:29, name:"Fırtına",       price:370,  rarity:"epic",      col:"#6366f1", hat:"storm",       eyes:"thunder",special:"wind"     },
+  // ── EFSANE (30-39)
+  { id:30, name:"Ateş Tanrısı",  price:600,  rarity:"legendary", col:"#ff4500", hat:"firehorns",   eyes:"inferno",special:"bigflame" },
+  { id:31, name:"Buz Kraliçesi", price:620,  rarity:"legendary", col:"#7dd3fc", hat:"icequeen",    eyes:"glacier",special:"blizzard" },
+  { id:32, name:"Kaos Lordu",    price:640,  rarity:"legendary", col:"#9333ea", hat:"chaos",       eyes:"void",   special:"chaos"    },
+  { id:33, name:"Güneş Tanrısı", price:660,  rarity:"legendary", col:"#fbbf24", hat:"solarcrown",  eyes:"solar",  special:"sunrays"  },
+  { id:34, name:"Karanlık",      price:680,  rarity:"legendary", col:"#1e1b4b", hat:"darkhood",    eyes:"purple", special:"dark"     },
+  { id:35, name:"Gökkuşağı",     price:700,  rarity:"legendary", col:"#f472b6", hat:"rainbow",     eyes:"rainbow",special:"rainbow"  },
+  { id:36, name:"Uzay İmparator$",price:720, rarity:"legendary", col:"#312e81", hat:"emperor",     eyes:"galaxy", special:"warp"     },
+  { id:37, name:"Titan",         price:740,  rarity:"legendary", col:"#78716c", hat:"titanhelm",   eyes:"giant",  special:"rock"     },
+  { id:38, name:"Kadim Orman",   price:760,  rarity:"legendary", col:"#166534", hat:"ancientleaf", eyes:"forest", special:"vines"    },
+  { id:39, name:"Evren Efsanesi",price:800,  rarity:"legendary", col:"#6d28d9", hat:"universe",    eyes:"cosmic", special:"rainbow",   sword:true },
+  // ── ÖZEL (40-53)
+  { id:40, name:"Balık Adam",    price:200,  rarity:"rare",      col:"#06b6d4", hat:"finhat",      eyes:"fishy",  special:"bubbles"  },
+  { id:41, name:"Tavşan",        price:180,  rarity:"rare",      col:"#fce7f3", hat:"bunny",       eyes:"happy",  special:null       },
+  { id:42, name:"Kedi",          price:190,  rarity:"rare",      col:"#fde68a", hat:"catears",     eyes:"cat",    special:null       },
+  { id:43, name:"Kurbağa",       price:170,  rarity:"rare",      col:"#4ade80", hat:"froghead",    eyes:"bulgy",  special:null       },
+  { id:44, name:"Penguen",       price:200,  rarity:"rare",      col:"#1e293b", hat:"penguin",     eyes:"cute",   special:null       },
+  { id:45, name:"Çilek",         price:160,  rarity:"common",    col:"#f43f5e", hat:"strawberry",  eyes:"happy",  special:null       },
+  { id:46, name:"Muz",           price:160,  rarity:"common",    col:"#fde047", hat:"banana",      eyes:"happy",  special:null       },
+  { id:47, name:"Patlıcan",      price:160,  rarity:"common",    col:"#7c3aed", hat:"eggplant",    eyes:"calm",   special:null       },
+  { id:48, name:"Astronot",      price:250,  rarity:"rare",      col:"#f8fafc", hat:"spacehelmet", eyes:"visor",  special:"float"    },
+  { id:49, name:"Zombi",         price:240,  rarity:"rare",      col:"#84cc16", hat:null,          eyes:"zombie", special:null       },
+  { id:50, name:"Vampir",        price:260,  rarity:"rare",      col:"#4c0519", hat:"vampcape",    eyes:"red",    special:null       },
+  { id:51, name:"Ay Tanrısı",    price:500,  rarity:"epic",      col:"#f1f5f9", hat:"mooncrescent",eyes:"moon",   special:"moonray"  },
+  { id:52, name:"Şeker",         price:140,  rarity:"common",    col:"#fb7185", hat:"candy",       eyes:"sweet",  special:null       },
+  { id:53, name:"T-REX",         price:900,  rarity:"legendary", col:"#16a34a", hat:"dinosaur",    eyes:"dino",   special:"roar"     },
+  // ── EKSTRA ÖZEL KOSTÜMLER (55-65)
+  { id:55, name:"Uzay Dedektifi",price:320, rarity:"epic",      col:"#6366f1", hat:"detective",   eyes:"visor",  special:"stars"    },
+  { id:56, name:"Lav Ejderi",    price:380, rarity:"epic",      col:"#f97316", hat:"horns",       eyes:"fire",   special:"flames"   },
+  { id:57, name:"Buz Tilkisi",   price:280, rarity:"rare",      col:"#e0f2fe", hat:"catears",     eyes:"cold",   special:"frost"    },
+  { id:58, name:"Neon Kovboy",   price:260, rarity:"rare",      col:"#fde047", hat:"cowboy",      eyes:"neon",   special:"electric" },
+  { id:59, name:"Kaos Ninja",    price:420, rarity:"epic",      col:"#c084fc", hat:"ninja",       eyes:"spiral", special:"chaos"    },
+  { id:60, name:"Altın Vampir",  price:500, rarity:"epic",      col:"#fbbf24", hat:"vampcape",    eyes:"gold",   special:"sparkle"  },
+  { id:61, name:"Robot Şef",     price:220, rarity:"rare",      col:"#94a3b8", hat:"chef",        eyes:"led",    special:null       },
+  { id:62, name:"Gökkuşağı Ejder",price:750,rarity:"legendary", col:"#f472b6", hat:"horns",       eyes:"rainbow",special:"rainbow"  },
+  { id:64, name:"Mor Büyücü",    price:190, rarity:"rare",      col:"#a855f7", hat:"wizard",      eyes:"star",   special:null       },
+  { id:65, name:"Buz Tanrısı",   price:580, rarity:"epic",      col:"#7dd3fc", hat:"icecrystal",  eyes:"glacier",special:"blizzard", sword:true },
+  // ── BOSS KOSTÜMLERI (boss öldürünce kazanılır, satın alınamaz)
+  { id:54, name:"Orman Devi",    price:0, rarity:"legendary", col:"#22c55e", hat:"ancientleaf", eyes:"forest", special:"vines",   bossReward:true },
+  { id:55, name:"Bulut Canavari",price:0, rarity:"legendary", col:"#60a5fa", hat:"lightning",   eyes:"spark",  special:"electric",bossReward:true },
+  { id:56, name:"Kum Devi",      price:0, rarity:"legendary", col:"#d97706", hat:"volcanic",    eyes:"glow",   special:null,      bossReward:true },
+  { id:57, name:"Demir Robot",   price:0, rarity:"legendary", col:"#94a3b8", hat:"antenna",     eyes:"led",    special:"electric",bossReward:true },
+  { id:58, name:"Deniz Ejderi",  price:0, rarity:"legendary", col:"#0891b2", hat:"trident",     eyes:"wave",   special:"bubbles", bossReward:true },
+  { id:59, name:"Karadelik",     price:0, rarity:"legendary", col:"#7c3aed", hat:"universe",    eyes:"void",   special:"universe",bossReward:true },
+  { id:60, name:"Lava Tanrisi",  price:0, rarity:"legendary", col:"#dc2626", hat:"firehorns",   eyes:"inferno",special:"bigflame",bossReward:true },
+  { id:61, name:"Boran Krali",   price:0, rarity:"legendary", col:"#bae6fd", hat:"icecrystal",  eyes:"cold",   special:"frost",   bossReward:true },
+  { id:62, name:"Neon Iblis",    price:0, rarity:"legendary", col:"#ec4899", hat:"chaos",       eyes:"neon",   special:"rainbow", bossReward:true },
+  { id:63, name:"Kaos Tanrisi",  price:0, rarity:"legendary", col:"#7c3aed", hat:"chaos",       eyes:"void",   special:"universe",bossReward:true, sword:true },
+];
+
+const RARITY_STYLE = {
+  common:    { label:"Yaygın",    color:"#94a3b8", glow:"#94a3b844" },
+  rare:      { label:"Nadir",     color:"#60a5fa", glow:"#60a5fa44" },
+  epic:      { label:"Epik",      color:"#a78bfa", glow:"#a78bfa55" },
+  legendary: { label:"Efsane",    color:"#fbbf24", glow:"#fbbf2455" },
+};
+
+// Kostüm özelliklerini çiz (şapka + göz + efekt)
+function drawCostumeExtras(ctx, costume, x, y, bob, tick, dead) {
+  if (!costume || dead) return;
+  ctx.save(); ctx.translate(x, y);
+
+  // ŞAPKALAR
+  const hy = -13 + bob; // head top
+  switch(costume.hat) {
+    case "leaf":
+      ctx.fillStyle = "#16a34a";
+      ctx.beginPath(); ctx.ellipse(0, hy-10, 12, 7, -0.3, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle="#15803d"; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(-12,hy-10); ctx.bezierCurveTo(-6,hy-18,6,hy-18,12,hy-10); ctx.stroke();
+      break;
+    case "cloud":
+      ctx.fillStyle="rgba(219,234,254,0.9)";
+      ctx.beginPath(); ctx.ellipse(0,hy-8,14,8,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-7,hy-12,9,7,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(7,hy-12,9,7,0,0,Math.PI*2); ctx.fill();
+      break;
+    case "chef":
+      ctx.fillStyle="#fff";
+      ctx.beginPath(); ctx.ellipse(0,hy-14,10,14,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#f0f0f0"; ctx.fillRect(-11,hy-6,22,5);
+      break;
+    case "viking":
+      ctx.fillStyle="#92400e";
+      ctx.beginPath(); ctx.roundRect(-12,hy-10,24,12,4); ctx.fill();
+      ctx.fillStyle="#fbbf24";
+      ctx.beginPath(); ctx.moveTo(-14,hy-4); ctx.lineTo(-20,hy+4); ctx.lineTo(-14,hy+2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(14,hy-4); ctx.lineTo(20,hy+4); ctx.lineTo(14,hy+2); ctx.fill();
+      break;
+    case "astronaut":
+      ctx.fillStyle="#e2e8f0"; ctx.shadowColor="#94a3b8"; ctx.shadowBlur=8;
+      ctx.beginPath(); ctx.arc(0,hy-6,16,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+      ctx.fillStyle="rgba(147,197,253,0.5)";
+      ctx.beginPath(); ctx.ellipse(0,hy-6,10,12,0,0,Math.PI*2); ctx.fill();
+      break;
+    case "ninja":
+      ctx.fillStyle="#1e293b";
+      ctx.fillRect(-14,hy-8,28,16);
+      ctx.fillRect(-14,hy-2,28,4);
+      break;
+    case "pirate":
+      ctx.fillStyle="#1e293b";
+      ctx.beginPath(); ctx.moveTo(-12,hy); ctx.lineTo(-12,hy-14); ctx.lineTo(12,hy-14); ctx.lineTo(12,hy); ctx.fill();
+      ctx.fillStyle="#fff"; ctx.fillRect(-6,hy-14,12,2);
+      ctx.fillStyle="#f87171"; ctx.fillRect(-6,hy-16,12,3);
+      break;
+    case "cowboy":
+      ctx.fillStyle="#d97706";
+      ctx.beginPath(); ctx.ellipse(0,hy-8,10,8,0,0,Math.PI*2); ctx.fill();
+      ctx.fillRect(-16,hy-2,32,4);
+      break;
+    case "wizard":
+      ctx.fillStyle="#7c3aed";
+      ctx.beginPath(); ctx.moveTo(0,hy-28); ctx.lineTo(-11,hy); ctx.lineTo(11,hy); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle="#fde047"; ctx.lineWidth=1.5;
+      for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(-4+i*4,hy-8-i*5,2,0,Math.PI*2);ctx.stroke();}
+      break;
+    case "detective":
+      ctx.fillStyle="#374151";
+      ctx.fillRect(-12,hy-14,24,14); ctx.fillRect(-16,hy-1,32,3);
+      break;
+    case "crown":
+      ctx.fillStyle="#ffd700"; ctx.shadowColor="#ffd700"; ctx.shadowBlur=10;
+      ctx.beginPath();
+      ctx.moveTo(-12,hy); ctx.lineTo(-12,hy-12); ctx.lineTo(-6,hy-7); ctx.lineTo(0,hy-14);
+      ctx.lineTo(6,hy-7); ctx.lineTo(12,hy-12); ctx.lineTo(12,hy); ctx.closePath(); ctx.fill();
+      ctx.shadowBlur=0;
+      break;
+    case "antenna":
+      ctx.strokeStyle="#94a3b8"; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.moveTo(0,hy); ctx.lineTo(0,hy-16); ctx.stroke();
+      ctx.fillStyle="#ef4444"; ctx.shadowColor="#ef4444"; ctx.shadowBlur=8;
+      ctx.beginPath(); ctx.arc(0,hy-16,4,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+      break;
+    case "horns":
+      ctx.fillStyle="#dc2626";
+      for(let s2=-1;s2<=1;s2+=2){ctx.beginPath();ctx.moveTo(s2*6,hy);ctx.lineTo(s2*10,hy-18);ctx.lineTo(s2*2,hy-8);ctx.fill();}
+      break;
+    case "lightning":
+      ctx.fillStyle="#fde047"; ctx.shadowColor="#fde047"; ctx.shadowBlur=12;
+      ctx.beginPath(); ctx.moveTo(0,hy-22); ctx.lineTo(-6,hy-10); ctx.lineTo(3,hy-10); ctx.lineTo(-3,hy); ctx.lineTo(6,hy-12); ctx.lineTo(-3,hy-12); ctx.lineTo(3,hy-22); ctx.fill();
+      ctx.shadowBlur=0; break;
+    case "goldcrown":
+      ctx.fillStyle="#ffd700"; ctx.shadowColor="#ffd700"; ctx.shadowBlur=16;
+      ctx.beginPath();
+      ctx.moveTo(-14,hy); ctx.lineTo(-14,hy-14); ctx.lineTo(-7,hy-9); ctx.lineTo(0,hy-18);
+      ctx.lineTo(7,hy-9); ctx.lineTo(14,hy-14); ctx.lineTo(14,hy); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#ef4444"; ctx.beginPath(); ctx.arc(0,hy-16,3,0,Math.PI*2); ctx.fill();
+      ctx.shadowBlur=0; break;
+    case "snowflake":
+      ctx.strokeStyle="#bae6fd"; ctx.lineWidth=2.5; ctx.shadowColor="#bae6fd"; ctx.shadowBlur=8;
+      for(let a=0;a<6;a++){ctx.save();ctx.translate(0,hy-12);ctx.rotate(a*Math.PI/3);ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-10);ctx.stroke();ctx.restore();}
+      ctx.shadowBlur=0; break;
+    case "bunny":
+      ctx.fillStyle="#fce7f3";
+      for(let s2=-1;s2<=1;s2+=2){ctx.beginPath();ctx.ellipse(s2*7,hy-18,4,11,s2*0.2,0,Math.PI*2);ctx.fill();}
+      ctx.fillStyle="#fbcfe8";
+      for(let s2=-1;s2<=1;s2+=2){ctx.beginPath();ctx.ellipse(s2*7,hy-18,2,7,s2*0.2,0,Math.PI*2);ctx.fill();}
+      break;
+    case "catears":
+      ctx.fillStyle="#fde68a";
+      for(let s2=-1;s2<=1;s2+=2){ctx.beginPath();ctx.moveTo(s2*4,hy);ctx.lineTo(s2*12,hy-16);ctx.lineTo(s2*16,hy);ctx.fill();}
+      break;
+    case "froghead":
+      ctx.fillStyle="#4ade80";
+      ctx.beginPath(); ctx.arc(0,hy-10,14,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#86efac"; ctx.beginPath(); ctx.arc(-6,hy-14,5,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(6,hy-14,5,0,Math.PI*2); ctx.fill();
+      break;
+    case "penguin":
+      ctx.fillStyle="#1e293b"; ctx.beginPath(); ctx.arc(0,hy-10,13,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#f8fafc"; ctx.beginPath(); ctx.ellipse(0,hy-8,8,10,0,0,Math.PI*2); ctx.fill();
+      break;
+    case "strawberry":
+      ctx.fillStyle="#f43f5e"; ctx.beginPath(); ctx.arc(0,hy-10,12,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#16a34a"; ctx.beginPath();
+      ctx.moveTo(-4,hy-18); ctx.lineTo(0,hy-26); ctx.lineTo(4,hy-18); ctx.fill();
+      ctx.fillStyle="rgba(255,255,255,0.4)"; ctx.font="9px sans-serif"; ctx.textAlign="center";
+      ctx.fillText("·",- 4,hy-8); ctx.fillText("·",4,hy-8); ctx.fillText("·",0,hy-4);
+      break;
+    case "candy":
+      ctx.strokeStyle="#f43f5e"; ctx.lineWidth=5; ctx.lineCap="round";
+      ctx.beginPath(); ctx.arc(4,hy-14,8,-Math.PI*0.5,Math.PI*0.8); ctx.stroke();
+      ctx.strokeStyle="#fde047"; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.arc(4,hy-14,8,-Math.PI*0.5,Math.PI*0.8); ctx.stroke();
+      break;
+    case "spacehelmet":
+      ctx.fillStyle="#334155"; ctx.shadowColor="#60a5fa"; ctx.shadowBlur=10;
+      ctx.beginPath(); ctx.arc(0,hy-8,16,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+      ctx.fillStyle="rgba(96,165,250,0.55)"; ctx.beginPath(); ctx.arc(0,hy-8,11,0,Math.PI*2); ctx.fill();
+      break;
+    case "vampcape":
+      ctx.fillStyle="#4c0519"; ctx.beginPath(); ctx.moveTo(-14,hy); ctx.lineTo(-18,hy+20); ctx.lineTo(18,hy+20); ctx.lineTo(14,hy); ctx.fill();
+      ctx.fillStyle="#9f1239";
+      for(let s2=-1;s2<=1;s2+=2){ctx.beginPath();ctx.moveTo(s2*3,hy-4);ctx.lineTo(s2*6,hy-12);ctx.lineTo(s2*0,hy-8);ctx.fill();}
+      break;
+    case "dinosaur":
+      ctx.fillStyle="#16a34a"; ctx.beginPath(); ctx.arc(0,hy-8,15,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#15803d";
+      for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(i*6,hy-22);ctx.lineTo(i*4,hy-14);ctx.lineTo(i*10,hy-14);ctx.fill();}
+      ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(-6,hy-6,3,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(6,hy-6,3,0,Math.PI*2); ctx.fill();
+      break;
+    default: break;
+  }
+
+  // ÖZEL EFEKTLERi (parçacık tarzı, hafif)
+  if(costume.special) {
+    ctx.globalAlpha = 0.55;
+    switch(costume.special) {
+      case "flames":
+        for(let i=0;i<3;i++){
+          const fx=(i-1)*10, ft=tick*0.18+i*2.1;
+          ctx.fillStyle=i%2===0?"#ff4500":"#fbbf24";
+          ctx.beginPath(); ctx.arc(fx, 18+bob+Math.sin(ft)*4, 4+Math.sin(ft)*2, 0, Math.PI*2); ctx.fill();
+        } break;
+      case "electric":
+        ctx.strokeStyle="#fde047"; ctx.lineWidth=1.5;
+        for(let i=0;i<2;i++){
+          const ex=i===0?-14:14, et=tick*0.15+i;
+          ctx.beginPath(); ctx.moveTo(ex,bob); ctx.lineTo(ex+Math.sin(et)*6,-6+bob); ctx.stroke();
+        } break;
+      case "sparkle":
+        ctx.fillStyle="#ffd700";
+        for(let i=0;i<4;i++){
+          const sa=(tick*0.12+i*1.57)%(Math.PI*2);
+          ctx.beginPath(); ctx.arc(Math.cos(sa)*18, Math.sin(sa)*16+bob, 2.5, 0, Math.PI*2); ctx.fill();
+        } break;
+      case "stars":
+        ctx.fillStyle="#a78bfa";
+        for(let i=0;i<3;i++){
+          const sa=(tick*0.08+i*2.1)%(Math.PI*2);
+          ctx.beginPath(); ctx.arc(Math.cos(sa)*22, Math.sin(sa)*18+bob, 3, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(Math.cos(sa+0.5)*14, Math.sin(sa+0.5)*12+bob, 1.5, 0, Math.PI*2); ctx.fill();
+        } break;
+      case "rainbow":
+        for(let i=0;i<6;i++){
+          const ra=(tick*0.1+i*1.05)%(Math.PI*2);
+          ctx.fillStyle=`hsl(${i*60},100%,60%)`;
+          ctx.beginPath(); ctx.arc(Math.cos(ra)*20, Math.sin(ra)*17+bob, 3, 0, Math.PI*2); ctx.fill();
+        } break;
+      case "bubbles":
+        ctx.fillStyle="rgba(96,165,250,0.5)";
+        for(let i=0;i<3;i++){
+          const bub=(tick*0.05+i*1.5)%(Math.PI*2);
+          const by2 = 20 - ((tick*0.8+i*18)%36);
+          ctx.beginPath(); ctx.arc((i-1)*12, by2+bob, 4, 0, Math.PI*2); ctx.fill();
+        } break;
+      case "universe":
+        for(let i=0;i<5;i++){
+          const ua=(tick*0.06+i*1.26)%(Math.PI*2);
+          ctx.fillStyle=`hsl(${240+i*24},80%,70%)`;
+          ctx.beginPath(); ctx.arc(Math.cos(ua)*22, Math.sin(ua)*18+bob, 2.5, 0, Math.PI*2); ctx.fill();
+        } break;
+    }
+    ctx.globalAlpha=1;
+  }
+
+  // ÖZEL GÖZLER
+  ctx.restore();
+}
+
+// Kostüm rengini al (costume varsa onun rengi, yoksa secilen renk)
+function getCostumeColor(costume, fallback) {
+  return costume ? costume.col : fallback;
+}
+
+// ══════════════════════════════════════════════════════════
+// HARITALAR
+// ══════════════════════════════════════════════════════════
+const MAPS = [
+  { id:0, n:"ORMAN",   k:"forest", c:"#4ade80", w:"#86efac", bg:["#071a0e","#0f2d1a","#050f08"], e:"🌿" },
+  { id:1, n:"BULUT",   k:"cloud",  c:"#93c5fd", w:"#bfdbfe", bg:["#0c1840","#162555","#080f30"], e:"☁️"  },
+  { id:2, n:"COEL",    k:"desert", c:"#fbbf24", w:"#fcd34d", bg:["#1a0c00","#2e1800","#0f0800"], e:"🏜️"  },
+  { id:3, n:"FABRİKA", k:"pipe",   c:"#fb923c", w:"#fdba74", bg:["#0d0d0d","#1a1a1a","#080808"], e:"⚙️"  },
+  { id:4, n:"OKYANUS", k:"ocean",  c:"#22d3ee", w:"#67e8f9", bg:["#001520","#002535","#000d14"], e:"🌊"  },
+  { id:5, n:"UZAY",    k:"space",  c:"#a78bfa", w:"#c4b5fd", bg:["#030010","#08001e","#020008"], e:"🚀"  },
+  { id:6, n:"LAVA",    k:"lava",   c:"#f87171", w:"#fca5a5", bg:["#140000","#260303","#0a0000"], e:"🌋"  },
+  { id:7, n:"KAR",     k:"snow",   c:"#bae6fd", w:"#e0f2fe", bg:["#000e20","#001535","#000810"], e:"❄️"  },
+  { id:8, n:"NEON",    k:"city",   c:"#f472b6", w:"#f9a8d4", bg:["#060010","#0e0022","#040008"], e:"🌆"  },
+  { id:9, n:"KAOS",    k:"chaos",  c:"#a855f7", w:"#d8b4fe", bg:["#020008","#060014","#010004"], e:"☠️"  },
+];
+
+// ══════════════════════════════════════════════════════════
+// BOSS TANIMLARI
+// ══════════════════════════════════════════════════════════
+const BDEFS = [
+  // Her boss kendine özgü özel güç kullanır (specialCd dolunca aktive)
+  { id:0, n:"ORMAN DEVİ",     e:"🌲", c:"#22c55e", hp:5,  sz:68,  ab:"Fındık Fırlatır",   st:"tree",
+    ms:0.9, cd:100, costumeId:54, shape:"forest",
+    special:"heal",      specialDesc:"Kendini 1 HP iyileştirir!", specialCd:300 },
+  { id:1, n:"BULUT CANAVARI", e:"⛅", c:"#60a5fa", hp:10, sz:75,  ab:"Yağmur Bombası",    st:"lightning",
+    ms:1.1, cd:88,  costumeId:55, shape:"cloud",
+    special:"storm",     specialDesc:"4 yönde şimşek çakar!",    specialCd:280 },
+  { id:2, n:"KUM DEVİ",       e:"🏜️", c:"#d97706", hp:15, sz:82,  ab:"Kum Topu",          st:"sand",
+    ms:1.0, cd:78,  costumeId:56, shape:"desert",
+    special:"sandwall",  specialDesc:"Kum duvarı engeller!",      specialCd:260 },
+  { id:3, n:"DEMİR ROBOT",    e:"🤖", c:"#94a3b8", hp:20, sz:88,  ab:"Çelik Top",         st:"rocket",
+    ms:1.3, cd:68,  costumeId:57, shape:"pipe",
+    special:"overdrive", specialDesc:"2x hız + çelik zırh!",     specialCd:250 },
+  { id:4, n:"DENİZ EJDERI",   e:"🐠", c:"#0891b2", hp:25, sz:95,  ab:"Su Topu",           st:"wave",
+    ms:1.1, cd:60,  costumeId:58, shape:"ocean",
+    special:"tsunami",   specialDesc:"Dev dalga sürükler!",       specialCd:240 },
+  { id:5, n:"KARADELİK",      e:"🌑", c:"#7c3aed", hp:25, sz:102, ab:"Karanlık Top",      st:"black",
+    ms:1.5, cd:72,  costumeId:59, shape:"space",
+    special:"gravity",   specialDesc:"Oyuncuyu çeker!",           specialCd:230 },
+  { id:6, n:"LAVA CANAVARI",  e:"🌋", c:"#dc2626", hp:25, sz:108, ab:"Lav Topu",          st:"lava",
+    ms:1.3, cd:55,  costumeId:60, shape:"lava",
+    special:"eruption",  specialDesc:"Lav seli döker!",           specialCd:220 },
+  { id:7, n:"BORAN KRALI",    e:"❄️",  c:"#bae6fd", hp:25, sz:115, ab:"Buz Topu",          st:"ice",
+    ms:1.2, cd:48,  costumeId:61, shape:"snow",
+    special:"blizzard",  specialDesc:"Oyuncuyu dondurur!",        specialCd:210 },
+  { id:8, n:"NEON CANAVARI",  e:"💜", c:"#ec4899", hp:25, sz:122, ab:"Neon Lazer",        st:"laser",
+    ms:1.8, cd:38,  costumeId:62, shape:"city",
+    special:"laserrain", specialDesc:"Lazer yağmuru!",            specialCd:200 },
+  { id:9, n:"KAOS TANRISI",   e:"💀", c:"#9333ea", hp:100,sz:145, ab:"Kaos Topu",         st:"chaos",
+    ms:2.2, cd:28,  costumeId:63, shape:"chaos",
+    special:"chaos",     specialDesc:"Tüm özel güçler!",          specialCd:180 },
+];
+
+// ══════════════════════════════════════════════════════════
+// SEVİYE FABRIKASI
+// ══════════════════════════════════════════════════════════
+// Özel tutorial seviyesi (id=-1)
+const TUTORIAL_LEVEL = {
+  id:-1, isBoss:false, isTutorial:true,
+  map: MAPS[0], boss:null,
+  name:"🎓 TUTORIAL", emoji:"🎓", color:"#4ade80",
+  hasSword:false, minions:0,
+  pCnt:5, gMin:55, gMax:75, pwMin:130, pwMax:160,
+  spd:0.75, obs:0,
+};
+
+function mkLevel(id) {
+  const mi = Math.floor(id / 10), gi = id % 10;
+  const isBoss = (id + 1) % 10 === 0 && id > 0;
+  const map = MAPS[Math.min(mi, 9)];
+  const boss = isBoss ? BDEFS[Math.floor(id / 10)] : null;
+  const p = id / 99;
+  const isIntro = id < 3;
+  return {
+    id, isBoss, map, boss,
+    name: isBoss ? boss.n : `${map.e} ${map.n} ${gi + 1}`,
+    emoji: isBoss ? boss.e : map.e,
+    color: isBoss ? boss.c : map.c,
+    hasSword: id >= 20 || isBoss,
+    minions: id >= 30 ? Math.floor(1 + p * 5) : 0,
+    pCnt: isIntro ? 4 : Math.floor(7 + p * 24),
+    gMin: isIntro ? 50 : Math.floor(60 + p * 170),
+    gMax: isIntro ? 90 : Math.floor(110 + p * 250),
+    pwMin: isIntro ? 120 : Math.max(14, Math.floor(145 - p * 125)),
+    pwMax: isIntro ? 180 : Math.max(28, Math.floor(210 - p * 170)),
+    spd: isIntro ? 0.8 : parseFloat((1.0 + p * 3.9 + (isBoss ? 0.9 : 0)).toFixed(2)),
+    obs: isIntro ? 0 : parseFloat(Math.min(0.93, p * 0.88 + (isBoss ? 0.2 : 0)).toFixed(2)),
+  };
+}
+const ALL = Array.from({ length: 100 }, (_, i) => mkLevel(i));
+const PCOLS = ["#ff6b6b","#ffd93d","#6bcb77","#4d96ff","#ff6bec","#ff922b","#66d9e8","#ffffff","#f472b6","#a78bfa","#34d399","#fb7185"];
+
+// ══════════════════════════════════════════════════════════
+// PLATFORM RENK + ŞEKİL
+// ══════════════════════════════════════════════════════════
+const PMAP = {
+  forest:["#4ade80","#166534"], cloud:["#93c5fd","#1e40af"],
+  desert:["#fbbf24","#92400e"], pipe:["#fb923c","#7c2d12"],
+  ocean:["#22d3ee","#164e63"],  space:["#a78bfa","#4c1d95"],
+  lava:["#f87171","#7f1d1d"],   snow:["#bae6fd","#075985"],
+  city:["#f472b6","#831843"],   chaos:["#a855f7","#3b0764"],
+};
+
+function drawPlatform(ctx, p, mk) {
+  const isFinish = p.isFinish;
+  const isDanger = p.type === "danger";
+  const isArena  = p.type === "arena";
+  const [c1, c2] = isFinish ? ["#ffd700","#92400e"] : isDanger ? ["#ef4444","#7f1d1d"] : isArena ? ["#ff2244","#550011"] : (PMAP[mk] || ["#aaa","#555"]);
+  const g = ctx.createLinearGradient(p.x, p.y, p.x, p.y + 14);
+  g.addColorStop(0, c1); g.addColorStop(1, c2);
+  ctx.fillStyle = g;
+  ctx.shadowColor = c1;
+  ctx.shadowBlur = isDanger ? 14 : isFinish ? 28 : 7;
+
+  ctx.beginPath();
+  if (mk === "cloud") {
+    ctx.ellipse(p.x + p.w / 2, p.y + 7, p.w / 2, 9, 0, 0, Math.PI * 2);
+  } else if (mk === "lava") {
+    ctx.moveTo(p.x, p.y + 14);
+    for (let i = 0; i <= p.w; i += 12)
+      ctx.lineTo(p.x + i, p.y + (i % 24 < 12 ? 0 : 14));
+    ctx.lineTo(p.x + p.w, p.y + 14); ctx.closePath();
+  } else if (mk === "snow") {
+    ctx.moveTo(p.x + 6, p.y); ctx.lineTo(p.x + p.w - 6, p.y);
+    ctx.lineTo(p.x + p.w, p.y + 14); ctx.lineTo(p.x, p.y + 14); ctx.closePath();
+  } else if (mk === "pipe") {
+    const r = 6;
+    ctx.moveTo(p.x + r, p.y); ctx.lineTo(p.x + p.w - r, p.y);
+    ctx.lineTo(p.x + p.w, p.y + 7); ctx.lineTo(p.x + p.w - r, p.y + 14);
+    ctx.lineTo(p.x + r, p.y + 14); ctx.lineTo(p.x, p.y + 7); ctx.closePath();
+  } else if (mk === "chaos") {
+    ctx.moveTo(p.x, p.y + 14);
+    for (let i = 0; i <= p.w; i += 9)
+      ctx.lineTo(p.x + i, p.y + (i % 18 < 9 ? 14 : 0));
+    ctx.lineTo(p.x + p.w, p.y + 14); ctx.closePath();
+  } else {
+    const r2 = Math.min(5, p.w / 2);
+    ctx.moveTo(p.x + r2, p.y); ctx.lineTo(p.x + p.w - r2, p.y);
+    ctx.quadraticCurveTo(p.x + p.w, p.y, p.x + p.w, p.y + r2);
+    ctx.lineTo(p.x + p.w, p.y + 14 - r2); ctx.quadraticCurveTo(p.x + p.w, p.y + 14, p.x + p.w - r2, p.y + 14);
+    ctx.lineTo(p.x + r2, p.y + 14); ctx.quadraticCurveTo(p.x, p.y + 14, p.x, p.y + 14 - r2);
+    ctx.lineTo(p.x, p.y + r2); ctx.quadraticCurveTo(p.x, p.y, p.x + r2, p.y); ctx.closePath();
+  }
+  ctx.fill(); ctx.shadowBlur = 0;
+  if (!isDanger && !isFinish && !isArena) {
+    ctx.fillStyle = "rgba(255,255,255,0.15)"; ctx.fillRect(p.x + 5, p.y + 2, p.w - 10, 4);
+  }
+  if (isFinish) {
+    ctx.strokeStyle = "#ffd700"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(p.x + 55, p.y); ctx.lineTo(p.x + 55, p.y - 68); ctx.stroke();
+    ctx.fillStyle = "#ff3333";
+    ctx.beginPath(); ctx.moveTo(p.x + 55, p.y - 68); ctx.lineTo(p.x + 96, p.y - 50); ctx.lineTo(p.x + 55, p.y - 32); ctx.fill();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// SUKULU BLOB KARAKTERİ
+// ══════════════════════════════════════════════════════════
+function drawBlob(ctx, x, y, col, dir, tick, ground, dead, sword, slashing, costume) {
+  ctx.save(); ctx.translate(x, y);
+  if (dir < 0) ctx.scale(-1, 1);
+  const bob = ground && !dead ? Math.sin(tick * 0.18) * 2 : 0;
+  const sq = ground ? 0 : 0.85;
+
+  // Gölge
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.beginPath(); ctx.ellipse(0, 24 + bob, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+  // Dış parlama halkası (harita rengine göre değişir)
+  ctx.strokeStyle = col + "66"; ctx.lineWidth = 2;
+  ctx.shadowColor = col; ctx.shadowBlur = 14;
+  ctx.beginPath(); ctx.ellipse(0, 4 + bob, 17, 20, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Ana blob gövde
+  ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 20;
+  ctx.beginPath();
+  ctx.moveTo(-13, 14 + bob);
+  ctx.bezierCurveTo(-19, 4 + bob, -17 - sq*2, -10 + sq*3, 0, -13 + bob + sq*2);
+  ctx.bezierCurveTo(17 + sq*2, -10 + sq*3, 19, 4 + bob, 13, 14 + bob);
+  ctx.bezierCurveTo(7, 24 + bob, -7, 24 + bob, -13, 14 + bob);
+  ctx.fill(); ctx.shadowBlur = 0;
+
+  // İç parlaklık (renk gradyan)
+  const hi = ctx.createRadialGradient(-4, -5 + bob, 1, -4, -5 + bob, 13);
+  hi.addColorStop(0, "rgba(255,255,255,0.42)"); hi.addColorStop(1, "transparent");
+  ctx.fillStyle = hi;
+  ctx.beginPath(); ctx.ellipse(-4, -3 + bob, 9, 11, -0.3, 0, Math.PI * 2); ctx.fill();
+
+  // Gözler (büyük, parlak, sukulu)
+  const ey = -3 + bob;
+  ctx.fillStyle = dead ? "#ff0000" : "#fff";
+  ctx.beginPath(); ctx.ellipse(5.5, ey, 5, 5.5, 0.15, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-5.5, ey, 5, 5.5, -0.15, 0, Math.PI * 2); ctx.fill();
+  // Göz bebekleri
+  ctx.fillStyle = dead ? "#660000" : "#1a1a2e";
+  ctx.beginPath(); ctx.ellipse(6, ey, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-5, ey, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  // Göz parlaması
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(7.2, ey - 1.3, 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-3.8, ey - 1.3, 1.3, 0, Math.PI * 2); ctx.fill();
+
+  // Ağız (duruma göre)
+  ctx.strokeStyle = "#1a1a2e"; ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  dead ? ctx.arc(0, 9 + bob, 5, Math.PI + 0.4, Math.PI * 2 - 0.4)
+       : ctx.arc(0, 8 + bob, 4, 0.35, Math.PI - 0.35);
+  ctx.stroke();
+
+  // Yanaklar (sevimli)
+  if (!dead) {
+    ctx.fillStyle = col + "55";
+    ctx.beginPath(); ctx.ellipse(-10, 6 + bob, 5, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(10, 6 + bob, 5, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Bacaklar
+  const ls = ground && !dead ? Math.sin(tick * 0.22) * 7 : 0;
+  ctx.strokeStyle = col; ctx.lineWidth = 3.5; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-5, 16 + bob); ctx.lineTo(-7 + ls, 28 + bob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(5, 16 + bob); ctx.lineTo(7 - ls, 28 + bob); ctx.stroke();
+
+  // Kollar
+  const as = Math.sin(tick * 0.22 + 1) * 9;
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-11, 2 + bob); ctx.lineTo(-18, 10 + as + bob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(11, 2 + bob); ctx.lineTo(18, 10 - as + bob); ctx.stroke();
+
+  // KILIC
+  if (sword || (costume && costume.sword)) {
+    const sa = slashing ? Math.sin(tick * 0.5) * 2.2 - 0.6 : 0.25;
+    ctx.save(); ctx.translate(18, 0 + bob); ctx.rotate(sa);
+    ctx.fillStyle = "#8B4513";
+    ctx.beginPath(); ctx.roundRect(-3, -4, 6, 10, 2); ctx.fill();
+    ctx.fillStyle = "#DAA520";
+    ctx.beginPath(); ctx.roundRect(-9, -3, 18, 5, 2); ctx.fill();
+    ctx.fillStyle = slashing ? "#fffde7" : "#d0d0d0";
+    ctx.shadowColor = slashing ? "#fff176" : "#888"; ctx.shadowBlur = slashing ? 18 : 5;
+    ctx.beginPath();
+    ctx.moveTo(-2, -4); ctx.lineTo(2, -4); ctx.lineTo(1, -28); ctx.lineTo(-1, -28); ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = slashing ? "rgba(255,255,200,0.8)" : "rgba(200,200,200,0.4)";
+    ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(0, -26); ctx.stroke();
+    ctx.shadowBlur = 0;
+    if (slashing) {
+      ctx.strokeStyle = "rgba(255,255,150,0.65)"; ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.arc(0, -14, 26, -1.1, 0.5); ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, -14, 32, -0.9, 0.3); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+  // Kostüm ekstraları (şapka, efekt)
+  if (costume && !dead) drawCostumeExtras(ctx, costume, x, y, bob, tick, dead);
+}
+
+// ══════════════════════════════════════════════════════════
+// MİNYON ÇİZİMİ (küçük sukulu düşman)
+// ══════════════════════════════════════════════════════════
+function drawMinion(ctx, m, tick) {
+  if (m.hp <= 0) return;
+  ctx.save(); ctx.translate(m.x, m.y);
+  if (m.dir < 0) ctx.scale(-1, 1);
+  const bob = Math.sin(tick * 0.25 + m.id * 1.3) * 1.5;
+
+  ctx.fillStyle = m.col; ctx.shadowColor = m.col; ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.moveTo(-8, 9 + bob);
+  ctx.bezierCurveTo(-12, 1 + bob, -11, -6 + bob, 0, -9 + bob);
+  ctx.bezierCurveTo(11, -6 + bob, 12, 1 + bob, 8, 9 + bob);
+  ctx.bezierCurveTo(5, 14 + bob, -5, 14 + bob, -8, 9 + bob);
+  ctx.fill(); ctx.shadowBlur = 0;
+
+  // Gözler
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.ellipse(3, -1 + bob, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-3, -1 + bob, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath(); ctx.ellipse(3.5, -1 + bob, 1.8, 2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-2.5, -1 + bob, 1.8, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+  // HP bar
+  ctx.fillStyle = "#ef4444"; ctx.fillRect(-12, -18, 24, 4);
+  ctx.fillStyle = "#4ade80"; ctx.fillRect(-12, -18, 24 * m.hp, 4);
+
+  ctx.restore();
+}
+
+// ══════════════════════════════════════════════════════════
+// BOSS ÇİZİMİ (devasa, her boss benzersiz)
+// ══════════════════════════════════════════════════════════
+function drawBoss(ctx, b, tick) {
+  if (b.hp <= 0) return;
+  const def = BDEFS[b.defId];
+  const sz = def.sz;
+  const bob = Math.sin(tick * 0.09) * 8;
+  const phase = b.hp / def.hp;
+  const hue2 = phase > 0.5 ? 140 : phase > 0.25 ? 40 : 0;
+  ctx.save(); ctx.translate(b.x, b.y + bob);
+
+  // Aura
+  const ag = ctx.createRadialGradient(0, 0, sz*0.2, 0, 0, sz*1.4);
+  ag.addColorStop(0, def.c + "33"); ag.addColorStop(1, "transparent");
+  ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(0, 0, sz*1.4, 0, Math.PI*2); ctx.fill();
+
+  // Hit flash
+  if (b.hitFlash > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${b.hitFlash/14})`;
+    ctx.beginPath(); ctx.arc(0, 0, sz*0.92, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Haritaya özgü boss şekli
+  ctx.fillStyle = def.c; ctx.shadowColor = def.c; ctx.shadowBlur = 32;
+  const sh = def.shape;
+
+  if (sh === "cloud") {
+    // Bulut: üç daire birleşimi
+    ctx.beginPath(); ctx.arc(0, sz*0.1, sz*0.6, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-sz*0.5, sz*0.25, sz*0.42, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sz*0.5, sz*0.25, sz*0.42, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-sz*0.28, -sz*0.18, sz*0.38, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sz*0.28, -sz*0.18, sz*0.38, 0, Math.PI*2); ctx.fill();
+  } else if (sh === "desert") {
+    // Çöl: sekizgen kaya
+    ctx.beginPath();
+    for (let i=0;i<8;i++){const a=(i/8)*Math.PI*2-Math.PI/8;const r=sz*(0.75+0.1*(i%2));ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}
+    ctx.closePath(); ctx.fill();
+  } else if (sh === "pipe") {
+    // Fabrika: hexagon robot
+    ctx.beginPath();
+    for (let i=0;i<6;i++){const a=(i/6)*Math.PI*2;ctx.lineTo(Math.cos(a)*sz*0.8,Math.sin(a)*sz*0.8);}
+    ctx.closePath(); ctx.fill();
+    // Robot parçaları
+    ctx.fillStyle = "#64748b";
+    ctx.fillRect(-sz*0.25, -sz*0.6, sz*0.5, sz*0.2);
+    ctx.fillRect(-sz*0.35, sz*0.4, sz*0.22, sz*0.25);
+    ctx.fillRect(sz*0.13, sz*0.4, sz*0.22, sz*0.25);
+  } else if (sh === "ocean") {
+    // Okyanus: dalgalı şekil
+    ctx.beginPath();
+    for (let i=0;i<60;i++){const a=(i/60)*Math.PI*2;const wave=1+0.2*Math.sin(a*4+tick*0.08);ctx.lineTo(Math.cos(a)*sz*0.78*wave,Math.sin(a)*sz*0.78*wave);}
+    ctx.closePath(); ctx.fill();
+  } else if (sh === "space") {
+    // Uzay: yıldız şekli
+    ctx.beginPath();
+    for (let i=0;i<10;i++){const a=(i/10)*Math.PI*2-Math.PI/2;const r=i%2===0?sz*0.82:sz*0.42;ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}
+    ctx.closePath(); ctx.fill();
+  } else if (sh === "lava") {
+    // Lava: titreyen blob
+    ctx.beginPath();
+    for (let i=0;i<60;i++){const a=(i/60)*Math.PI*2;const n=1+0.18*Math.sin(a*3+tick*0.12)+0.1*Math.cos(a*5-tick*0.08);ctx.lineTo(Math.cos(a)*sz*0.78*n,Math.sin(a)*sz*0.78*n);}
+    ctx.closePath(); ctx.fill();
+  } else if (sh === "snow") {
+    // Kar: kristal/elmas
+    ctx.beginPath();
+    for (let i=0;i<12;i++){const a=(i/12)*Math.PI*2;const r=i%2===0?sz*0.82:sz*0.55;ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}
+    ctx.closePath(); ctx.fill();
+  } else if (sh === "city") {
+    // Neon: kalp + geometrik
+    ctx.beginPath();
+    for (let i=0;i<60;i++){const a=(i/60)*Math.PI*2;const heart=sz*0.7*(Math.pow(Math.sin(a),3));const hx2=16*Math.pow(Math.sin(a),3)*sz*0.045;const hy2=-(13*Math.cos(a)-5*Math.cos(2*a)-2*Math.cos(3*a)-Math.cos(4*a))*sz*0.045;ctx.lineTo(hx2,hy2);}
+    ctx.closePath(); ctx.fill();
+  } else if (sh === "chaos") {
+    // Kaos: karmaşık multi-şekil
+    ctx.beginPath();
+    for (let i=0;i<80;i++){const a=(i/80)*Math.PI*2;const chaos2=1+0.25*Math.sin(a*7+tick*0.05)+0.15*Math.cos(a*11-tick*0.07)+0.1*Math.sin(a*13);ctx.lineTo(Math.cos(a)*sz*0.72*chaos2,Math.sin(a)*sz*0.72*chaos2);}
+    ctx.closePath(); ctx.fill();
+  } else {
+    // Forest (default): yuvarlak ama organik
+    ctx.beginPath();
+    for (let i=0;i<60;i++){const a=(i/60)*Math.PI*2;const n=1+0.12*Math.cos(a*3)+0.08*Math.sin(a*5);ctx.lineTo(Math.cos(a)*sz*0.8*n,Math.sin(a)*sz*0.8*n);}
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+
+  // İç parlaklık
+  const ig = ctx.createRadialGradient(-sz*0.18, -sz*0.22, sz*0.04, -sz*0.18, -sz*0.22, sz*0.48);
+  ig.addColorStop(0, "rgba(255,255,255,0.24)"); ig.addColorStop(1, "transparent");
+  ctx.fillStyle = ig; ctx.beginPath(); ctx.ellipse(-sz*0.18, -sz*0.22, sz*0.42, sz*0.52, 0, 0, Math.PI*2); ctx.fill();
+
+  // Haritaya özgü aksesuarlar
+  if (sh === "forest") {
+    ctx.fillStyle = "#15803d";
+    for (let s2=-1;s2<=1;s2+=2){ctx.beginPath();ctx.ellipse(s2*sz*0.38,-sz*0.62,sz*0.13,sz*0.34,s2*0.4,0,Math.PI*2);ctx.fill();}
+  } else if (sh === "cloud") {
+    ctx.strokeStyle="#fde047"; ctx.lineWidth=sz*0.048;
+    for (let s2=-1;s2<=1;s2+=2){ctx.beginPath();ctx.moveTo(s2*sz*0.3,-sz*0.55);ctx.lineTo(s2*sz*0.17,-sz*0.8);ctx.lineTo(s2*sz*0.34,-sz*0.82);ctx.lineTo(s2*sz*0.19,-sz*1.06);ctx.stroke();}
+  } else if (sh === "space") {
+    ctx.strokeStyle = def.c; ctx.lineWidth = sz*0.07;
+    ctx.beginPath(); ctx.ellipse(0, 0, sz*1.12, sz*0.28, 0.12, 0, Math.PI*2); ctx.stroke();
+  } else if (sh === "chaos") {
+    ctx.fillStyle = "#6d28d9";
+    for (let i=0;i<5;i++){const ang=-Math.PI*0.9+i*(Math.PI*0.45);ctx.beginPath();ctx.moveTo(Math.cos(ang)*sz*0.55,Math.sin(ang)*sz*0.55);ctx.lineTo(Math.cos(ang-0.16)*sz*0.98,Math.sin(ang-0.16)*sz*0.98);ctx.lineTo(Math.cos(ang+0.16)*sz*0.98,Math.sin(ang+0.16)*sz*0.98);ctx.closePath();ctx.fill();}
+    ctx.strokeStyle=`hsl(${tick*3},100%,60%)`; ctx.lineWidth=sz*0.03;
+    ctx.beginPath(); ctx.arc(0,0,sz*0.72,0,Math.PI*2); ctx.stroke();
+  } else {
+    ctx.fillStyle = def.c + "cc";
+    ctx.beginPath(); ctx.moveTo(-sz*0.28,-sz*0.55); ctx.lineTo(-sz*0.38,-sz*0.96); ctx.lineTo(-sz*0.13,-sz*0.62); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(sz*0.28,-sz*0.55); ctx.lineTo(sz*0.38,-sz*0.96); ctx.lineTo(sz*0.13,-sz*0.62); ctx.fill();
+  }
+
+  // Yanaklar
+  ctx.fillStyle = def.c + "88";
+  ctx.beginPath(); ctx.ellipse(-sz*0.38, sz*0.05, sz*0.14, sz*0.09, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(sz*0.38, sz*0.05, sz*0.14, sz*0.09, 0, 0, Math.PI*2); ctx.fill();
+
+  // Gözler
+  const eyX = Math.sin(tick*0.06)*sz*0.05;
+  ctx.fillStyle = "#ffff00"; ctx.shadowColor = "#ff0"; ctx.shadowBlur = 16;
+  ctx.beginPath(); ctx.ellipse(-sz*0.23+eyX,-sz*0.19,sz*0.155,sz*0.19,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(sz*0.23+eyX,-sz*0.19,sz*0.155,sz*0.19,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#000"; ctx.shadowBlur = 0;
+  ctx.beginPath(); ctx.ellipse(-sz*0.23+eyX,-sz*0.19,sz*0.088,sz*0.105,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(sz*0.23+eyX,-sz*0.19,sz*0.088,sz*0.105,0,0,Math.PI*2); ctx.fill();
+
+  // Ağız + dişler
+  ctx.strokeStyle="#440000"; ctx.lineWidth=sz*0.046;
+  ctx.beginPath(); ctx.arc(0,sz*0.12,sz*0.3,0.28,Math.PI-0.28); ctx.stroke();
+  ctx.fillStyle="#fff";
+  for (let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(i*sz*0.1,sz*0.32);ctx.lineTo(i*sz*0.1-sz*0.055,sz*0.49);ctx.lineTo(i*sz*0.1+sz*0.055,sz*0.49);ctx.fill();}
+
+  // HP bar
+  const bw=sz*2.5, bh=18;
+  ctx.fillStyle="rgba(0,0,0,0.78)"; ctx.beginPath(); ctx.roundRect(-bw/2,-sz-54,bw,bh,8); ctx.fill();
+  const hcol=phase>0.6?"#4ade80":phase>0.3?"#fbbf24":"#ef4444";
+  ctx.fillStyle=hcol; ctx.shadowColor=hcol; ctx.shadowBlur=14;
+  if (phase>0){ctx.beginPath();ctx.roundRect(-bw/2,-sz-54,bw*phase,bh,8);ctx.fill();}
+  ctx.shadowBlur=0;
+  ctx.fillStyle="#fff"; ctx.textAlign="center";
+  ctx.font=`bold ${Math.floor(sz*0.155)}px 'Courier New'`;
+  ctx.fillText(`${def.e} ${def.n}`,0,-sz-58);
+  ctx.font=`${Math.floor(sz*0.12)}px 'Courier New'`;
+  ctx.fillText(`HP ${b.hp}/${def.hp}  |  ${def.ab}`,0,-sz-38);
+  ctx.textAlign="left";
+  // Özel güç aktif efekti
+  if (b.specialActive > 0) {
+    const sa = b.specialActive/90;
+    ctx.save(); ctx.translate(b.x, b.y + bob);
+    ctx.strokeStyle = def.c; ctx.lineWidth = 5*sa; ctx.shadowColor = def.c; ctx.shadowBlur = 28*sa;
+    ctx.globalAlpha = sa*0.8;
+    ctx.beginPath(); ctx.arc(0, 0, def.sz*1.15+Math.sin(b.specialActive*0.2)*10, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    ctx.fillStyle = "#fff"; ctx.font = "bold 13px 'Courier New'"; ctx.textAlign = "center";
+    ctx.fillText(def.specialDesc, 0, -def.sz*1.35);
+    ctx.textAlign = "left";
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+
+// ══════════════════════════════════════════════════════════
+// ARKA PLAN
+// ══════════════════════════════════════════════════════════
+function drawBg(ctx, W, H, map, camX, tick) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, map.bg[0]); g.addColorStop(0.6, map.bg[1]); g.addColorStop(1, map.bg[2]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  if (map.k === "space" || map.k === "chaos") {
+    for (let i = 0; i < 100; i++) {
+      const sx = ((i*137.5+camX*0.17)%(W+40))-20, sy = (i*79.3)%(H*0.92);
+      const fl = 0.35+0.65*Math.sin(tick*0.04+i*1.7);
+      ctx.fillStyle = map.k === "chaos" ? `hsla(${i*37+tick*2},100%,70%,${fl*0.65})` : `rgba(255,255,255,${fl*0.7})`;
+      ctx.beginPath(); ctx.arc(sx, sy, i%5===0?2.2:i%3===0?1.1:0.55, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  if (map.k === "forest") {
+    ctx.fillStyle = "rgba(74,222,128,0.07)";
+    for (let i = 0; i < 8; i++) {
+      const tx = ((i*210-camX*0.07)%(W+320))-110;
+      ctx.beginPath(); ctx.moveTo(tx, H); ctx.lineTo(tx+80, H*0.38); ctx.lineTo(tx+160, H); ctx.fill();
+    }
+  }
+  if (map.k === "cloud") {
+    for (let i = 0; i < 6; i++) {
+      const cx = ((i*230-camX*0.05)%(W+350))-120, cy = H*0.18+i*38;
+      ctx.fillStyle = `rgba(147,197,253,${0.07+i*0.018})`;
+      ctx.beginPath(); ctx.ellipse(cx, cy, 100, 38, 0, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  if (map.k === "ocean") {
+    for (let i = 0; i < 5; i++) {
+      ctx.strokeStyle = `rgba(34,211,238,${0.05+i*0.024})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, H*0.27+i*28);
+      for (let wx = 0; wx < W; wx += 60)
+        ctx.quadraticCurveTo(wx+30, H*0.27+i*28-13+Math.sin(wx*0.04+tick*0.022+i)*13, wx+60, H*0.27+i*28);
+      ctx.stroke();
+    }
+  }
+  if (map.k === "snow") {
+    for (let i = 0; i < 45; i++) {
+      const sx = ((i*94+camX*0.11+tick*0.44)%(W+22))-11, sy = ((i*67+tick*0.98)%H);
+      ctx.fillStyle = `rgba(186,230,253,${0.22+0.38*(i%3===0?1:0)})`;
+      ctx.beginPath(); ctx.arc(sx, sy, i%4===0?4:1.8, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  if (map.k === "lava") {
+    const lg = ctx.createLinearGradient(0, H*0.66, 0, H);
+    lg.addColorStop(0, `rgba(239,68,68,${0.13+0.09*Math.sin(tick*0.04)})`); lg.addColorStop(1, "transparent");
+    ctx.fillStyle = lg; ctx.fillRect(0, H*0.66, W, H*0.34);
+    for (let i = 0; i < 12; i++) {
+      const bx = ((i*148-camX*0.09+tick*0.58)%(W+110))-55;
+      const by = H-18+Math.sin(tick*0.08+i*0.78)*9;
+      ctx.fillStyle = `rgba(255,${58+i*17},0,0.62)`;
+      ctx.beginPath(); ctx.arc(bx, by, 5+i%4*3, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  if (map.k === "city") {
+    for (let i = 0; i < 9; i++) {
+      const bx = ((i*152-camX*0.06)%(W+220))-110, bh = 62+i*30;
+      ctx.fillStyle = "rgba(244,114,182,0.08)"; ctx.strokeStyle = "rgba(244,114,182,0.16)"; ctx.lineWidth = 1;
+      ctx.fillRect(bx, H-bh, 44, bh); ctx.strokeRect(bx, H-bh, 44, bh);
+      ctx.fillStyle = `rgba(255,255,0,${0.2+0.22*Math.sin(tick*0.05+i)})`;
+      for (let wy = H-bh+10; wy < H-8; wy += 15)
+        for (let wx2 = bx+6; wx2 < bx+38; wx2 += 13) ctx.fillRect(wx2, wy, 7, 7);
+    }
+    // Neon tabelalar
+    ctx.strokeStyle = `hsl(${tick*2},100%,60%)`; ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const nx = ((i*280-camX*0.1)%(W+300))-100;
+      ctx.beginPath(); ctx.arc(nx, H*0.35+i*30, 15, 0, Math.PI*2); ctx.stroke();
+    }
+  }
+  if (map.k === "desert") {
+    for (let i = 0; i < 5; i++) {
+      const sx = ((i*220-camX*0.05+tick*0.2)%(W+320))-160;
+      ctx.fillStyle = "rgba(251,191,36,0.05)";
+      ctx.beginPath(); ctx.ellipse(sx, H*0.5, 135, 48, 0, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  if (map.k === "pipe") {
+    ctx.strokeStyle = "rgba(251,146,60,0.08)"; ctx.lineWidth = 8;
+    for (let i = 0; i < 4; i++) {
+      const px2 = ((i*280-camX*0.04)%(W+300))-100;
+      ctx.beginPath(); ctx.moveTo(px2, 0); ctx.lineTo(px2, H); ctx.stroke();
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// PLATFORM ÜRETICI (seeded random - her bölüm farklı layout)
+// ══════════════════════════════════════════════════════════
+function genLevel(lv, W, H) {
+  const wireY = H * 0.57;
+  const plats = [], obs = [];
+
+  // ── BOSS BÖLÜMÜ: tek geniş düz zemin, bitiş dahil ──────────────
+  if (lv.isBoss) {
+    const arenaW = W * 3.4;
+    // Arena + bitiş birleşik — boşluk yok, düşme imkansız
+    plats.push({ x: 0, y: wireY, w: arenaW, h: 14, type: "arena" });
+    // Bitiş platformu arenaya yapışık (gap=0)
+    plats.push({ x: arenaW, y: wireY, w: 260, h: 14, type: "finish", isFinish: true });
+    return { plats, obs, totalW: arenaW + 260, wireY };
+  }
+
+  // ── NORMAL BÖLÜM: parkur ─────────────────────────────────────────
+  plats.push({ x: 0, y: wireY, w: 230, h: 14, type: "start" });
+  let x = 270;
+  let seed = lv.id * 7919 + 1337;
+  const rng = () => { seed = (seed * 1664525 + 1013904223) & 0x7fffffff; return seed / 0x7fffffff; };
+
+  for (let i = 0; i < lv.pCnt; i++) {
+    const gap = lv.gMin + rng() * (lv.gMax - lv.gMin);
+    const pw  = lv.pwMin + rng() * (lv.pwMax - lv.pwMin);
+    const yo  = (rng() - 0.5) * 74;
+    const hasO = i > 1 && rng() < lv.obs;
+    plats.push({ x, y: wireY + yo, w: pw, h: 14, type: hasO ? "danger" : "normal" });
+    if (hasO) obs.push({
+      x: x+pw/2, bx: x+pw/2, y: wireY+yo-22, w: 14, h: 20,
+      t: rng()*Math.PI*2, range: 22+rng()*44, spd: (0.5+rng()*1.6)*lv.spd*0.32,
+    });
+    x += pw + gap;
+  }
+  plats.push({ x, y: wireY, w: 270, h: 14, type: "finish", isFinish: true });
+  return { plats, obs, totalW: x+270, wireY };
+}
+
+// ══════════════════════════════════════════════════════════
+// OYUN SAHNE
+// ══════════════════════════════════════════════════════════
+function Game({ lv, col, btnSz, cfg, activeCostume, activeHero, onWin, onDie, onBack, onSettings }) {
+  const cvs   = useRef(null);
+  const sRef  = useRef(null);
+  const raf   = useRef(null);
+  const keys  = useRef({});
+  const touch = useRef({ left: false, right: false });
+  const jFlag = useRef(false);
+  const aFlag = useRef(false);
+  const pFlag = useRef(false); // güç tuşu
+  const W = window.innerWidth, H = window.innerHeight;
+
+  useEffect(() => {
+    AudioMgr.init(); AudioMgr.startMusic(lv.isBoss && lv.boss ? `boss${lv.boss.id}` : lv.map.k);
+    const canvas = cvs.current;
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    const { plats, obs, totalW, wireY } = genLevel(lv, W, H);
+    const arenaP = plats.find(p => p.type === "arena");
+    const def = lv.boss ? BDEFS[lv.boss.id] : null;
+    const boss = lv.isBoss && arenaP ? {
+      defId: lv.boss.id,
+      x: W * 0.55,
+      y: arenaP.y - def.sz * 0.74,
+      baseY: arenaP.y - def.sz * 0.74,
+      hp: def.hp, vx: def.ms,
+      arena: { x: 80, w: W * 2.6 },
+      proj: [], shootCd: def.cd, hitFlash: 0,
+      specialCd: def.specialCd || 999, specialActive: 0,
+    } : null;
+
+    // Minyonlar
+    const MCOLS = ["#ff6b6b","#ffd93d","#6bcb77","#ff6bec","#66d9e8","#f472b6"];
+    const minions = [];
+    if (lv.minions > 0) {
+      for (let i = 0; i < lv.minions; i++) {
+        const pidx = Math.floor(1 + Math.random() * Math.max(1, plats.length - 3));
+        const p = plats[Math.min(pidx, plats.length - 2)];
+        minions.push({
+          id: i, x: p.x + p.w*0.5, y: p.y - 28,
+          vx: (Math.random()>0.5?1:-1)*(0.9+Math.random()*1.4)*lv.spd*0.45,
+          vy: 0, hp: 1, dir: 1, col: MCOLS[i%MCOLS.length],
+          pL: p.x + 10, pR: p.x + p.w - 10, onGround: false,
+        });
+      }
+    }
+
+    sRef.current = {
+      px: 115, py: wireY-52, vx: 0, vy: 0,
+      onGround: false, camX: 0, tick: 0, facing: 1,
+      plats, obs, totalW, wireY, boss, minions,
+      dead: false, finished: false, deathTick: 0,
+      progress: 0, shake: 0, slashTick: 0, atkCd: 0,
+      lives: lv.isBoss ? 3 : 1, livesFlash: 0,
+      powerActive: false, powerRem: 0, powerCd: 0,
+      shieldHits: 0, reborn: false,
+      jumpsLeft: 2, dashCd: 0, dashActive: 0, dashDir: 1,
+      combo: 0, comboTimer: 0, bestCombo: 0, speedTimer: 0,
+    };
+
+    const loop = () => {
+      const s = sRef.current; if (!s) return;
+      s.tick++;
+
+      if (!s.dead && !s.finished) {
+        const L = keys.current["ArrowLeft"]  || keys.current["a"] || touch.current.left;
+        const R = keys.current["ArrowRight"] || keys.current["d"] || touch.current.right;
+        const J = jFlag.current || keys.current[" "] || keys.current["ArrowUp"] || keys.current["w"];
+        const A = aFlag.current || keys.current["x"] || keys.current["f"];
+        jFlag.current = false; aFlag.current = false;
+
+        if (L) { s.vx = -4.5*lv.spd; s.facing = -1; }
+        else if (R) { s.vx = 4.5*lv.spd; s.facing = 1; }
+        else s.vx *= 0.76;
+
+        if (J && s.jumpsLeft > 0) {
+          s.vy = s.jumpsLeft === 2 ? -13 : -10; // İkinci zıplama biraz daha az
+          if (!s.onGround) s.jumpsLeft = Math.max(0, s.jumpsLeft - 1);
+          else s.jumpsLeft = 1; // Yerden zıplayınca 1 hak kalır
+          s.onGround = false;
+          AudioMgr.sfx("jump");
+          // İkinci zıplama efekti
+          if (s.jumpsLeft === 0) s.doubleJumpFx = 12;
+        }
+        if (s.onGround) s.jumpsLeft = 2; // Yere basınca reset
+        if (s.doubleJumpFx > 0) s.doubleJumpFx--;
+
+        // DASH (çift ◀/▶ veya D tuşu + yön)
+        const dashKey = keys.current["e"] || keys.current["E"];
+        if (dashKey && s.dashCd <= 0 && !s.dashActive) {
+          s.dashActive = 12; s.dashDir = s.facing; s.dashCd = 45;
+          AudioMgr.sfx("slash");
+        }
+        if (s.dashActive > 0) {
+          s.vx = s.dashDir * 14; s.dashActive--;
+          // Dash sırasında engellere çarpmaz
+        }
+        if (s.dashCd > 0) s.dashCd--;
+        // Combo timer
+        if (s.comboTimer > 0) { s.comboTimer--; }
+        else if (s.combo > 0) { s.combo = 0; }
+        s.speedTimer++;
+        if (lv.map.k === "snow" && s.onGround) s.vx *= 0.97;
+
+        // Kılıç saldırısı
+        // Özel güç aktive
+        const P = pFlag.current || keys.current["q"];
+        pFlag.current = false;
+        if (P && activeHero && s.powerCd <= 0 && !s.powerActive) {
+          s.powerActive = true;
+          s.powerRem = activeHero.dur;
+          s.powerCd = activeHero.cd;
+          s.shieldHits = 3;
+          AudioMgr.sfx("unlock");
+          // Anlık güçler
+          if (activeHero.power === "lightning" && boss && boss.hp > 0) {
+            const dmg = activeHero.bossDmg;
+            boss.hp = Math.max(0, boss.hp - dmg);
+            boss.hitFlash = 16; s.shake = 18;
+            if (boss.hp <= 0) { boss.proj = []; s.shake = 28; AudioMgr.sfx("win"); }
+          }
+          if ((activeHero.power === "chaos" || activeHero.power === "overkill") && boss && boss.hp > 0) {
+            const dmg2 = Math.min(activeHero.bossDmg, boss.hp);
+            boss.hp = Math.max(0, boss.hp - dmg2);
+            boss.hitFlash = 20; s.shake = 22;
+            if (boss.hp <= 0) { boss.proj = []; s.shake = 30; AudioMgr.sfx("win"); }
+          }
+          if (activeHero.power === "firebreath") {
+            for (const m of s.minions) m.hp = 0;
+          }
+        }
+        if (s.powerActive) {
+          s.powerRem--;
+          if (s.powerRem <= 0) s.powerActive = false;
+          // Dondur: boss sabit
+          if (activeHero && activeHero.power === "freeze" && boss) {
+            boss.vx = 0;
+          }
+          // Yavaşlat: boss ve mermiler
+          if (activeHero && activeHero.power === "slowtime" && boss) {
+            boss.vx *= 0.3;
+            if (s.tick % 3 !== 0 && boss.proj) boss.proj.forEach(p2 => { p2.vx *= 0.3; p2.vy *= 0.3; });
+          }
+          // Karanlık: boss ateş etmez
+          if (activeHero && activeHero.power === "darkness" && boss) {
+            boss.shootCd = Math.max(boss.shootCd, 60);
+          }
+          // Yer çekimsiz: yukarı uç
+          if (activeHero && activeHero.power === "antigrav") {
+            s.vy = Math.min(s.vy, -0.5);
+            s.onGround = false;
+          }
+          // Tornado: mermileri sav
+          if (activeHero && activeHero.power === "tornado" && boss && boss.proj) {
+            boss.proj.forEach(p2 => {
+              const ang2 = Math.atan2(p2.y - s.py, p2.x - s.px);
+              p2.vx = Math.cos(ang2 + Math.PI) * 5;
+              p2.vy = Math.sin(ang2 + Math.PI) * 5;
+            });
+          }
+          // Lazer duvarı: mermileri durdur
+          if (activeHero && activeHero.power === "laserwall" && boss && boss.proj) {
+            if (s.tick % 5 === 0) boss.proj = boss.proj.filter(p2 => Math.abs(p2.x - s.px) > 80);
+          }
+          // Gökkuşağı: mermileri zararsız yap
+          if (activeHero && activeHero.power === "rainbow" && boss && boss.proj) {
+            boss.proj.forEach(p2 => { p2.harmless = true; });
+          }
+          // Thorns: gelen mermiyi geri gönder
+          if (activeHero && activeHero.power === "thorns" && boss && boss.proj) {
+            boss.proj.forEach(p2 => {
+              if (Math.abs(p2.x - s.px) < 30 && Math.abs(p2.y - s.py) < 30) {
+                p2.vx *= -1.5; p2.vy *= -1.5; p2.friendly = true;
+              }
+            });
+          }
+          // Lava havuzu: boss sürekli hasar
+          if (activeHero && activeHero.power === "lavapool" && boss && boss.hp > 0 && s.tick % 60 === 0) {
+            boss.hp = Math.max(0, boss.hp - 1);
+            boss.hitFlash = 8;
+            if (boss.hp <= 0) { boss.proj = []; AudioMgr.sfx("win"); }
+          }
+          // Dalga: boss'u iter
+          if (activeHero && activeHero.power === "wave" && boss) {
+            boss.x += (boss.x > s.px ? 8 : -8);
+          }
+          // Karadelik: boss'u çek
+          if (activeHero && activeHero.power === "blackhole" && boss) {
+            const bdx = s.px - boss.x;
+            boss.x += bdx * 0.08;
+            boss.vx *= 0.1;
+          }
+
+        }
+        if (s.powerCd > 0) s.powerCd--;
+
+        if (A && s.atkCd <= 0 && lv.hasSword) {
+          s.slashTick = 22; s.atkCd = 24; AudioMgr.sfx("slash");
+          // Minyonlara vur
+          for (const m of s.minions) {
+            if (m.hp > 0 && Math.abs(s.px-m.x) < 60 && Math.abs(s.py-m.y) < 42 &&
+                ((s.facing === 1 && m.x > s.px) || (s.facing === -1 && m.x < s.px))) {
+              m.hp = 0; AudioMgr.sfx("hit");
+              s.combo++; s.comboTimer = 120;
+              if (s.combo > s.bestCombo) s.bestCombo = s.combo;
+            }
+          }
+          // Boss'a kılıç
+          if (boss && boss.hp > 0 && def) {
+            if (Math.abs(s.px-boss.x) < def.sz*0.65+58 && Math.abs(s.py-boss.y) < def.sz*0.72 &&
+                ((s.facing===1 && boss.x>s.px)||(s.facing===-1 && boss.x<s.px))) {
+              const isLastBoss = def && def.id === 9; // Kaos Tanrısı = 10. boss
+              const baseDmg = isLastBoss ? 5 : 1;   // 10. boss: 1 kılıç = 5 hasar
+              const sdmg = activeHero && s.powerActive ? Math.max(baseDmg, activeHero.swordDmg) : baseDmg;
+              boss.hp = Math.max(0, boss.hp - sdmg); boss.hitFlash = 12; s.shake = 11; AudioMgr.sfx("hit");
+              s.combo += sdmg; s.comboTimer = 150;
+              if (s.combo > s.bestCombo) s.bestCombo = s.combo;
+              if (boss.hp <= 0) { boss.proj = []; s.shake = 26; AudioMgr.sfx("win"); }
+            }
+          }
+        }
+        if (s.atkCd > 0) s.atkCd--;
+        if (s.slashTick > 0) s.slashTick--;
+
+        s.vy += 0.50; s.px += s.vx; s.py += s.vy;
+        if (s.px < 14) { s.px = 14; s.vx = 0; }
+
+        // Platform çarpışma
+        s.onGround = false;
+        for (const p of s.plats) {
+          if (s.px+14 < p.x || s.px-14 > p.x+p.w) continue;
+          const foot = s.py+28, prev = foot-s.vy;
+          if (prev <= p.y+5 && foot >= p.y && s.vy >= 0) {
+            s.py = p.y-28; s.vy = 0; s.onGround = true;
+            if (p.isFinish && s.px > p.x+38 && (!boss || boss.hp <= 0)) {
+              s.finished = true; s.finishTime = s.tick;
+              AudioMgr.sfx("win"); setTimeout(onWin, 500);
+            }
+          }
+        }
+
+        // Engeller
+        for (const o of s.obs) {
+          o.t += 0.05*lv.spd; o.x = o.bx + Math.sin(o.t)*o.range;
+          if (Math.abs(s.px-o.x)<16 && Math.abs(s.py-o.y+10)<22) {
+            const inv2 = activeHero && s.powerActive && (activeHero.power==="invisible"||activeHero.power==="goldshield"||activeHero.power==="immortal");
+            if (!inv2) {
+              if (lv.isBoss && s.lives > 1) { s.lives--; s.livesFlash=60; s.py=s.wireY-52; s.px=115; s.vy=-8; s.vx=0; AudioMgr.sfx("die"); }
+              else { s.dead=true; AudioMgr.sfx("die"); }
+            }
+          }
+        }
+
+        // Minyonlar
+        for (const m of minions) {
+          if (m.hp <= 0) continue;
+          m.vy += 0.50; m.x += m.vx; m.y += m.vy; m.dir = m.vx > 0 ? 1 : -1;
+          m.onGround = false;
+          for (const p of s.plats) {
+            if (m.x+9 < p.x || m.x-9 > p.x+p.w) continue;
+            const foot = m.y+18, prev = foot-m.vy;
+            if (prev <= p.y+5 && foot >= p.y && m.vy >= 0) { m.y = p.y-18; m.vy = 0; m.onGround = true; }
+          }
+          if (m.x < m.pL || m.x > m.pR) m.vx *= -1;
+          if (m.y > H+110) m.hp = 0;
+          if (Math.abs(s.px-m.x) < 22 && Math.abs(s.py-m.y) < 32) {
+            const inv3 = activeHero && s.powerActive && (activeHero.power==="invisible"||activeHero.power==="goldshield"||activeHero.power==="immortal");
+            if (!inv3) {
+              if (lv.isBoss && s.lives > 1) { s.lives--; s.livesFlash=60; s.py=s.wireY-52; s.px=115; s.vy=-8; s.vx=0; AudioMgr.sfx("die"); }
+              else { s.dead=true; AudioMgr.sfx("die"); }
+            }
+          }
+        }
+
+        // Boss
+        if (boss && boss.hp > 0) {
+          boss.hitFlash = Math.max(0, boss.hitFlash-1);
+          boss.shootCd--;
+          boss.x += boss.vx * (1+(def.hp-boss.hp)*0.24);
+          if (boss.x > boss.arena.x+boss.arena.w-def.sz*0.66) boss.vx = -Math.abs(boss.vx);
+          if (boss.x < boss.arena.x+def.sz*0.66) boss.vx = Math.abs(boss.vx);
+          boss.y = boss.baseY + Math.sin(s.tick*0.09)*25;
+
+          // Boss özel güç
+          boss.specialCd--;
+          if (boss.specialCd <= 0) {
+            boss.specialCd = def.specialCd || 999;
+            boss.specialActive = 90; // 1.5 sn görsel efekt
+            const sp = def.special;
+            if (sp === "heal" && boss.hp < def.hp) {
+              boss.hp = Math.min(def.hp, boss.hp + 1);
+              boss.hitFlash = 8;
+            }
+            if (sp === "storm") {
+              for (let a=0; a<4; a++) {
+                const ang = a*(Math.PI/2)+s.tick*0.1;
+                boss.proj.push({ x:boss.x, y:boss.y, vx:Math.cos(ang)*6, vy:Math.sin(ang)*6, life:120, c:"#fde047" });
+              }
+            }
+            if (sp === "sandwall") {
+              for (let i=-2; i<=2; i++)
+                boss.proj.push({ x:boss.x+i*40, y:boss.y, vx:0, vy:3, life:100, c:"#fbbf24" });
+            }
+            if (sp === "overdrive") { boss.vx *= 1.8; boss.specialActive = 120; }
+            if (sp === "tsunami") {
+              for (let i=0; i<5; i++)
+                boss.proj.push({ x:boss.x-100+i*50, y:boss.y, vx:(s.px>boss.x?1:-1)*4, vy:0, life:130, c:"#22d3ee" });
+            }
+            if (sp === "gravity") {
+              s.px += (boss.x-s.px)*0.18; s.py += (boss.y-s.py)*0.18;
+              s.shake = 14;
+            }
+            if (sp === "eruption") {
+              for (let i=0; i<8; i++) {
+                const ang2 = (i/8)*Math.PI*2;
+                boss.proj.push({ x:boss.x, y:boss.y, vx:Math.cos(ang2)*5, vy:Math.sin(ang2)*5-3, life:140, c:"#ef4444" });
+              }
+            }
+            if (sp === "blizzard") {
+              s.vx *= 0.2; s.shake = 10;
+              for (let i=-1; i<=1; i++)
+                boss.proj.push({ x:boss.x+i*60, y:boss.y, vx:(s.px>boss.x?2:-2)+i, vy:2, life:110, c:"#bae6fd" });
+            }
+            if (sp === "laserrain") {
+              for (let i=0; i<6; i++)
+                boss.proj.push({ x:boss.arena.x+i*(W*2.6/5), y:boss.y-80, vx:0, vy:6, life:100, c:"#ec4899" });
+            }
+            if (sp === "chaos") {
+              for (let a=0; a<8; a++) {
+                const ang3 = (a/8)*Math.PI*2+s.tick*0.05;
+                boss.proj.push({ x:boss.x, y:boss.y, vx:Math.cos(ang3)*5, vy:Math.sin(ang3)*5, life:160, c:`hsl(${a*45},100%,60%)` });
+              }
+              boss.vx *= 1.4; s.shake = 16;
+            }
+            AudioMgr.sfx("boss");
+          }
+          if (boss.specialActive > 0) {
+            boss.specialActive--;
+            if (def.special === "overdrive" && boss.specialActive <= 0) boss.vx /= 1.8;
+          }
+
+          if (boss.shootCd <= 0) {
+            const dx = s.px-boss.x, dy = s.py-boss.y;
+            const dist = Math.sqrt(dx*dx+dy*dy)||1;
+            const spd = 3.8+(def.hp-boss.hp)*1.4;
+            if (def.st === "chaos") {
+              for (let a = 0; a < 6; a++) {
+                const ang = (a/6)*Math.PI*2+s.tick*0.05;
+                boss.proj.push({ x:boss.x, y:boss.y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd, life:175, c:def.c });
+              }
+            } else if (def.st === "laser") {
+              for (let o2 = -24; o2 <= 24; o2 += 24)
+                boss.proj.push({ x:boss.x+o2, y:boss.y, vx:dx/dist*spd, vy:dy/dist*spd, life:155, c:def.c });
+            } else if (def.st === "wave") {
+              for (let a = -0.35; a <= 0.35; a += 0.35) {
+                const ca = Math.cos(a), sa2 = Math.sin(a);
+                boss.proj.push({ x:boss.x, y:boss.y, vx:(dx/dist*spd)*ca-(dy/dist*spd)*sa2, vy:(dx/dist*spd)*sa2+(dy/dist*spd)*ca, life:145, c:def.c });
+              }
+            } else {
+              boss.proj.push({ x:boss.x, y:boss.y, vx:dx/dist*spd, vy:dy/dist*spd, life:165, c:def.c });
+            }
+            boss.shootCd = Math.max(16, def.cd-(def.hp-boss.hp)*7);
+          }
+
+          boss.proj = boss.proj.filter(pr => {
+            pr.x += pr.vx; pr.y += pr.vy; pr.life--;
+            if (def.st === "black") { s.px += (pr.x-s.px)*0.007; s.py += (pr.y-s.py)*0.007; }
+            if (pr.life <= 0) return false;
+            if (pr.harmless) return pr.life > 0;
+            if (Math.abs(s.px-pr.x)<18 && Math.abs(s.py-pr.y)<18) {
+              const invulnerable = activeHero && s.powerActive && (activeHero.power==="invisible"||activeHero.power==="goldshield"||activeHero.power==="immortal");
+              if (invulnerable) return false;
+              const shielded = activeHero && s.powerActive && (activeHero.power==="shield") && s.shieldHits > 0;
+              if (shielded) { s.shieldHits--; s.shake=6; return false; }
+              const lifesteal = activeHero && s.powerActive && activeHero.power==="lifesteal";
+              if (lifesteal) { s.shake=4; return false; }
+
+              if (lv.isBoss && s.lives > 1) {
+                s.lives--; s.livesFlash = 60; s.py = s.wireY-52; s.px = 115; s.vy = -8; s.vx = 0;
+                s.powerActive = false; s.dead = false; AudioMgr.sfx("die");
+              } else { s.dead=true; AudioMgr.sfx("die"); }
+              return false;
+            }
+            return true;
+          });
+
+          // Boss'a değersen ölürsün — sadece kılıçla yenilir!
+          if (Math.abs(s.px-boss.x) < def.sz*0.54 && Math.abs(s.py-boss.y) < def.sz*0.62) {
+            const inv4 = activeHero && s.powerActive && (activeHero.power==="invisible"||activeHero.power==="goldshield"||activeHero.power==="immortal");
+            if (!inv4) {
+              if (s.lives > 1) { s.lives--; s.livesFlash=60; s.py=s.wireY-52; s.px=115; s.vy=-8; s.vx=0; AudioMgr.sfx("die"); }
+              else { s.dead=true; AudioMgr.sfx("die"); }
+            }
+          }
+        }
+
+        s.camX = Math.max(0, Math.min(s.totalW-W, s.px-W*0.33));
+        s.progress = Math.min(1, (s.px-115)/(s.totalW-400));
+        if (s.py > H+150) {
+{ s.dead=true; AudioMgr.sfx("die"); }
+        }
+        if (s.dead) s.deathTick = 0;
+      }
+
+      if (s.dead) { s.deathTick++; if (s.deathTick > 95) { onDie(); return; } }
+      if (s.shake > 0) s.shake--;
+
+      // ─── ÇİZİM
+      ctx.clearRect(0, 0, W, H);
+      drawBg(ctx, W, H, lv.map, s.camX, s.tick);
+
+      ctx.save();
+      if (s.shake > 0 && cfg && cfg.screenShake !== false) ctx.translate((Math.random()-0.5)*s.shake*0.72, (Math.random()-0.5)*s.shake*0.72);
+      // Can kaybı kırmızı flash
+      if (s.livesFlash > 40) {
+        ctx.fillStyle = `rgba(255,0,0,${(s.livesFlash-40)/60*0.35})`;
+        ctx.fillRect(0,0,W,H);
+      }
+      ctx.translate(-s.camX, 0);
+
+      // Tel
+      ctx.strokeStyle = lv.map.w; ctx.lineWidth = 2.5;
+      ctx.shadowColor = lv.map.w; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.moveTo(0, s.wireY); ctx.lineTo(s.totalW, s.wireY); ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Platform
+      for (const p of s.plats) {
+        if (p.x-s.camX > W+200 || p.x+p.w-s.camX < -200) continue;
+        drawPlatform(ctx, p, lv.map.k);
+        // Tutorial etiketleri
+        if (lv.isTutorial && p.label) {
+          ctx.fillStyle="rgba(255,255,255,0.9)"; ctx.font="bold 12px 'Courier New'"; ctx.textAlign="center";
+          ctx.shadowColor="#4ade80"; ctx.shadowBlur=8;
+          ctx.fillText(p.label, p.x+p.w/2, p.y-14); ctx.textAlign="left"; ctx.shadowBlur=0;
+        }
+                if (p.isFinish && lv.isBoss && boss && boss.hp > 0) {
+          ctx.fillStyle = "rgba(255,50,50,0.85)"; ctx.font = "bold 13px 'Courier New'"; ctx.textAlign = "center";
+          ctx.fillText("👹 BOSS'U YEN!", p.x+p.w/2, p.y-10); ctx.textAlign = "left";
+        }
+      }
+
+      // Engeller
+      for (const o of s.obs) {
+        if (Math.abs(o.x-(s.camX+W/2)) > W+80) continue;
+        ctx.fillStyle = "#ff2222"; ctx.shadowColor = "#ff0000"; ctx.shadowBlur = 18;
+        ctx.beginPath(); ctx.moveTo(o.x, o.y-o.h); ctx.lineTo(o.x-o.w/2, o.y); ctx.lineTo(o.x+o.w/2, o.y); ctx.closePath();
+        ctx.fill(); ctx.shadowBlur = 0;
+      }
+
+      // Minyonlar
+      for (const m of minions) {
+        if (m.hp <= 0 || Math.abs(m.x-s.camX-W/2) > W+60) continue;
+        drawMinion(ctx, m, s.tick);
+      }
+
+      // Boss + mermiler
+      if (boss) {
+        drawBoss(ctx, boss, s.tick);
+        for (const pr of boss.proj) {
+          if (Math.abs(pr.x-s.camX-W/2) > W+90) continue;
+          const pg = ctx.createRadialGradient(pr.x, pr.y, 1, pr.x, pr.y, 10);
+          pg.addColorStop(0, "#fff"); pg.addColorStop(0.5, pr.c); pg.addColorStop(1, "transparent");
+          ctx.fillStyle = pg; ctx.shadowColor = pr.c; ctx.shadowBlur = 16;
+          ctx.beginPath(); ctx.arc(pr.x, pr.y, 9, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+        }
+      }
+
+      // Dash izi efekti
+      if (s.dashActive > 0) {
+        for (let di = 1; di <= 3; di++) {
+          ctx.globalAlpha = 0.2 * (1 - di/4);
+          ctx.fillStyle = getCostumeColor(activeCostume, col);
+          ctx.beginPath(); ctx.ellipse(s.px - s.camX - s.dashDir*di*18, s.py, 12, 16, 0, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      // Çift zıplama efekti
+      if (s.doubleJumpFx > 0) {
+        ctx.strokeStyle = getCostumeColor(activeCostume, col);
+        ctx.lineWidth = 2; ctx.globalAlpha = s.doubleJumpFx/12;
+        ctx.shadowColor = getCostumeColor(activeCostume, col); ctx.shadowBlur = 12;
+        ctx.beginPath(); ctx.arc(s.px-s.camX, s.py, 28+( 12-s.doubleJumpFx)*3, 0, Math.PI*2); ctx.stroke();
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+      }
+
+      // Karakter
+      if (!s.dead) {
+        if (activeHero && s.powerActive && activeHero.power==="invisible") ctx.globalAlpha=0.30;
+
+        drawBlob(ctx, s.px, s.py, getCostumeColor(activeCostume, col), s.facing, s.tick, s.onGround, false, lv.hasSword, s.slashTick > 0, activeCostume);
+        ctx.globalAlpha=1; ctx.shadowBlur=0;
+      } else {
+        ctx.globalAlpha = Math.max(0, 1-s.deathTick/28);
+        ctx.save(); ctx.translate(s.px, s.py-s.deathTick*2.8); ctx.rotate(s.deathTick*0.07);
+        drawBlob(ctx, 0, 0, getCostumeColor(activeCostume, col), s.facing, s.tick, false, true, false, false, null); ctx.restore();
+        ctx.globalAlpha = 1;
+        for (let i = 0; i < 12 && s.deathTick < 26; i++) {
+          const a=(i/12)*Math.PI*2, d=s.deathTick*3.9;
+          ctx.globalAlpha = Math.max(0,1-s.deathTick/26); ctx.fillStyle = col;
+          ctx.beginPath(); ctx.arc(s.px+Math.cos(a)*d, s.py+Math.sin(a)*d, 4.5, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      // Güç efekti
+      if (activeHero && s.powerActive) drawPowerFX(ctx, s, activeHero, W, H);
+      ctx.restore();
+
+      // HUD
+      ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.beginPath(); ctx.roundRect(W/2-140,8,280,14,7); ctx.fill();
+      ctx.fillStyle = lv.isBoss ? "#ff2244" : lv.map.c; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 18;
+      if (s.progress > 0) { ctx.beginPath(); ctx.roundRect(W/2-140,8,280*Math.max(0,s.progress),14,7); ctx.fill(); }
+      ctx.shadowBlur = 0;
+      ctx.font="16px serif"; ctx.fillText("🚀",W/2-158,24); ctx.fillText("🏁",W/2+142,24);
+
+      ctx.fillStyle="rgba(0,0,0,0.68)"; ctx.beginPath(); ctx.roundRect(W/2-95,26,190,25,8); ctx.fill();
+      ctx.fillStyle=lv.isBoss?"#ff4466":lv.map.c; ctx.font="bold 12px 'Courier New'"; ctx.textAlign="center";
+      ctx.fillText(`${lv.emoji} ${lv.name}`,W/2,43); ctx.textAlign="left";
+
+      ctx.fillStyle="rgba(0,0,0,0.65)"; ctx.beginPath(); ctx.roundRect(W-76,8,66,26,7); ctx.fill();
+      ctx.fillStyle="rgba(255,255,255,0.78)"; ctx.font="bold 11px 'Courier New'";
+      ctx.fillText(`${lv.id+1}/100`,W-70,25);
+      // Can göstergesi (boss bölümünde)
+      if (lv.isBoss) {
+        ctx.fillStyle="rgba(0,0,0,0.65)"; ctx.beginPath(); ctx.roundRect(W/2-55,H-44,110,28,8); ctx.fill();
+        ctx.font="18px serif"; ctx.textAlign="center";
+        const heartsStr = (s.lives>=3?"❤️":"🖤")+(s.lives>=2?"❤️":"🖤")+(s.lives>=1?"❤️":"🖤");
+        ctx.fillText(heartsStr, W/2, H-22);
+        ctx.textAlign="left";
+        if (s.livesFlash > 0) { s.livesFlash--; }
+      }
+
+      if (lv.isBoss && boss && boss.hp > 0) {
+        ctx.fillStyle="rgba(0,0,0,0.72)"; ctx.beginPath(); ctx.roundRect(W/2-118,56,236,32,9); ctx.fill();
+        ctx.fillStyle="#ff4466"; ctx.font="bold 11px 'Courier New'"; ctx.textAlign="center";
+        ctx.fillText(`${BDEFS[boss.defId].e} ${BDEFS[boss.defId].n}`,W/2,69);
+        const bsDef=BDEFS[boss.defId]; const bscdPct=Math.max(0,1-boss.specialCd/(bsDef.specialCd||999));
+        ctx.fillStyle="rgba(255,255,255,0.08)"; ctx.beginPath(); ctx.roundRect(W/2-98,76,196,5,2); ctx.fill();
+        ctx.fillStyle=bscdPct>=0.95?"#ff4466":"rgba(255,100,100,0.4)";
+        ctx.beginPath(); ctx.roundRect(W/2-98,76,196*bscdPct,5,2); ctx.fill();
+        ctx.fillStyle="rgba(255,180,180,0.6)"; ctx.font="8px 'Courier New'"; ctx.textAlign="center";
+        ctx.fillText(`⚡ ${bsDef.specialDesc||""}`,W/2,89);
+        const hc2 = boss.hp/def.hp>0.6?"#4ade80":boss.hp/def.hp>0.3?"#fbbf24":"#ef4444";
+        ctx.fillStyle="rgba(255,255,255,0.12)"; ctx.beginPath(); ctx.roundRect(W/2-98,72,196,9,4); ctx.fill();
+        ctx.fillStyle=hc2; ctx.shadowColor=hc2; ctx.shadowBlur=10;
+        ctx.beginPath(); ctx.roundRect(W/2-98,72,196*(boss.hp/def.hp),9,4); ctx.fill(); ctx.shadowBlur=0;
+        ctx.textAlign="left";
+      }
+
+      ctx.fillStyle="rgba(0,0,0,0.68)"; ctx.beginPath(); ctx.roundRect(10,8,74,28,7); ctx.fill();
+      ctx.fillStyle="rgba(255,255,255,0.72)"; ctx.font="11px 'Courier New'"; ctx.fillText("← GERİ",16,26);
+      // Ayarlar butonu (sağ üst)
+      ctx.fillStyle="rgba(0,0,0,0.68)"; ctx.beginPath(); ctx.roundRect(W-74,38,64,26,7); ctx.fill();
+      ctx.fillStyle="rgba(255,255,255,0.6)"; ctx.font="10px 'Courier New'"; ctx.fillText("⚙️ AYAR",W-68,55);
+
+      // Çift zıplama göstergesi (sol üst, alt köşe)
+      for (let ji=0; ji<2; ji++) {
+        const jc = ji < s.jumpsLeft ? getCostumeColor(activeCostume,col) : "rgba(255,255,255,0.2)";
+        ctx.fillStyle = jc; ctx.shadowColor = jc; ctx.shadowBlur = ji < s.jumpsLeft ? 8 : 0;
+        ctx.beginPath(); ctx.roundRect(10+(ji*26), H-36, 20, 12, 4); ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+      // Dash göstergesi
+      const dPct = s.dashCd <= 0 ? 1 : 1-s.dashCd/45;
+      ctx.fillStyle = "rgba(255,255,255,0.15)"; ctx.beginPath(); ctx.roundRect(64, H-36, 40, 12, 4); ctx.fill();
+      ctx.fillStyle = dPct>=1?"#60a5fa":"rgba(96,165,250,0.4)"; ctx.shadowColor="#60a5fa"; ctx.shadowBlur = dPct>=1?8:0;
+      ctx.beginPath(); ctx.roundRect(64, H-36, 40*dPct, 12, 4); ctx.fill(); ctx.shadowBlur=0;
+      ctx.fillStyle="rgba(255,255,255,0.5)"; ctx.font="8px 'Courier New'"; ctx.fillText("E=DASH",66,H-27);
+
+      // Combo gösterge
+      if (s.combo > 0) {
+        ctx.fillStyle="rgba(0,0,0,0.6)"; ctx.beginPath(); ctx.roundRect(W/2-55,56,110,28,8); ctx.fill();
+        ctx.fillStyle=`hsl(${s.combo*12},100%,65%)`; ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=12;
+        ctx.font="bold 14px 'Fredoka One',sans-serif"; ctx.textAlign="center";
+        ctx.fillText(`🔥 x${s.combo} COMBO`,W/2,75); ctx.textAlign="left"; ctx.shadowBlur=0;
+      }
+      // Süre
+      const secs = Math.floor(s.tick/60), mins = Math.floor(secs/60);
+      const timeStr = `${mins}:${String(secs%60).padStart(2,"0")}`;
+      ctx.fillStyle="rgba(0,0,0,0.5)"; ctx.beginPath(); ctx.roundRect(W/2-30,H-38,60,18,5); ctx.fill();
+      ctx.fillStyle="rgba(255,255,255,0.5)"; ctx.font="10px 'Courier New'"; ctx.textAlign="center";
+      ctx.fillText(timeStr,W/2,H-25); ctx.textAlign="left";
+
+      if (lv.hasSword) {
+        ctx.fillStyle="rgba(0,0,0,0.62)"; ctx.beginPath(); ctx.roundRect(10,H-56,165,30,7); ctx.fill();
+        ctx.fillStyle=s.atkCd>0?"#888":"#fde047"; ctx.font="11px 'Courier New'";
+        ctx.fillText(`⚔️ Kılıç${s.atkCd>0?" ("+s.atkCd+")":"✓"} | Zıpla/Vur`,16,H-36);
+      }
+      // Güç göstergesi
+      if (activeHero) {
+        const pwY = lv.hasSword ? H-92 : H-56;
+        ctx.fillStyle="rgba(0,0,0,0.65)"; ctx.beginPath(); ctx.roundRect(10,pwY-4,200,36,8); ctx.fill();
+        const pReady = s.powerCd<=0 && !s.powerActive;
+        const pColor = s.powerActive ? activeHero.glow : pReady ? "#4ade80" : "#666";
+        ctx.fillStyle=pColor; ctx.shadowColor=pColor; ctx.shadowBlur=pReady?10:0;
+        ctx.font="bold 11px 'Courier New'";
+        const pLabel = s.powerActive ? `${activeHero.powerEmoji} ${activeHero.powerName}! (${Math.ceil(s.powerRem/60)}s)` : pReady ? `${activeHero.powerEmoji} Q = ${activeHero.powerName}` : `${activeHero.powerEmoji} CD: ${Math.ceil(s.powerCd/60)}s`;
+        ctx.fillText(pLabel,16,pwY+14);
+        ctx.shadowBlur=0;
+        // CD bar
+        const cdPct = s.powerActive ? s.powerRem/activeHero.dur : s.powerCd>0 ? 1-s.powerCd/activeHero.cd : 1;
+        ctx.fillStyle="rgba(255,255,255,0.1)"; ctx.fillRect(10,pwY+20,200,5);
+        ctx.fillStyle=s.powerActive?activeHero.glow:"#4ade80"; ctx.fillRect(10,pwY+20,200*Math.max(0,Math.min(1,cdPct)),5);
+      }
+
+      raf.current = requestAnimationFrame(loop);
+    };
+
+    raf.current = requestAnimationFrame(loop);
+    return () => { cancelAnimationFrame(raf.current); AudioMgr.stopMusic(); };
+  }, []);
+
+  useEffect(() => {
+    const kd = e => {
+      keys.current[e.key] = true;
+      if ([" ","ArrowUp","ArrowLeft","ArrowRight","w","a","d","x","f","q"].includes(e.key)) e.preventDefault();
+    };
+    const ku = e => { keys.current[e.key] = false; };
+    window.addEventListener("keydown", kd); window.addEventListener("keyup", ku);
+    return () => { window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); };
+  }, []);
+
+  const handleTap = useCallback(e => {
+    const x = e.clientX ?? e.changedTouches?.[0]?.clientX;
+    const y = e.clientY ?? e.changedTouches?.[0]?.clientY;
+    if (x < 90 && y < 46) { AudioMgr.stopMusic(); onBack(); }
+    // Ayarlar butonu
+    if (x > W-80 && y > 36 && y < 68) { onSettings(); }
+  }, [onBack, onSettings, W]);
+
+  const bs = btnSz || 68;
+  return (
+    <div style={{ position:"fixed",inset:0,touchAction:"none" }}>
+      <canvas ref={cvs} style={{ display:"block" }} onClick={handleTap} onTouchEnd={handleTap}/>
+      <div style={{ position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"space-between",alignItems:"flex-end",padding:`0 18px ${Math.max(24,bs*0.3)}px`,pointerEvents:"none" }}>
+        {/* SOL: Hareket tuşları */}
+        <div style={{ display:"flex",gap:10,pointerEvents:"all",alignItems:"flex-end" }}>
+          <GB sz={bs} label="◀" onS={()=>touch.current.left=true}  onE={()=>touch.current.left=false}/>
+          <GB sz={bs} label="▶" onS={()=>touch.current.right=true} onE={()=>touch.current.right=false}/>
+          <GB sz={Math.floor(bs*0.78)} label="💨" col="rgba(96,165,250,0.25)"
+            onS={()=>{ keys.current["e"]=true; }} onE={()=>{ keys.current["e"]=false; }}/>
+        </div>
+        {/* SAĞ: Zıplama + Kılıç yan yana (başparmak ulaşır) + Güç üstte */}
+        <div style={{ display:"flex",flexDirection:"column",gap:10,pointerEvents:"all",alignItems:"flex-end" }}>
+          {activeHero && (
+            <div style={{ alignSelf:"center" }}>
+              <GB sz={Math.floor(bs*0.72)} label={activeHero.powerEmoji}
+                col={`rgba(${activeHero.glow.replace('#','').match(/.{2}/g).map(x=>parseInt(x,16)).join(',')},0.28)`}
+                onS={()=>{pFlag.current=true;}} onE={()=>{}}/>
+            </div>
+          )}
+          <div style={{ display:"flex",gap:10,alignItems:"flex-end" }}>
+            {lv.hasSword && (
+              <GB sz={Math.floor(bs*1.05)} label="⚔️"
+                col="rgba(253,224,71,0.25)"
+                big
+                onS={()=>{aFlag.current=true;}} onE={()=>{}}/>
+            )}
+            <GB sz={Math.floor(bs*1.18)} label="↑"
+              col="rgba(99,102,241,0.28)" big
+              onS={()=>{jFlag.current=true;}} onE={()=>{}}/>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GB({ sz, label, onS, onE, col, big }) {
+  return (
+    <button
+      onTouchStart={e=>{e.preventDefault();onS();}}
+      onTouchEnd={e=>{e.preventDefault();onE();}}
+      onMouseDown={onS} onMouseUp={onE}
+      style={{ width:sz,height:sz,background:col||"rgba(255,255,255,0.13)",border:"2.5px solid rgba(255,255,255,0.34)",borderRadius:"50%",color:"#fff",fontSize:big?sz*0.42:sz*0.38,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent",userSelect:"none",backdropFilter:"blur(8px)",touchAction:"none",pointerEvents:"all",fontWeight:"bold",boxShadow:big?"0 4px 22px rgba(99,102,241,0.45)":"0 2px 12px rgba(0,0,0,0.35)",flexShrink:0 }}>
+      {label}
+    </button>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// BLOB ÖNİZLEME
+// ══════════════════════════════════════════════════════════
+function BlobPrev({ col, sword, costume }) {
+  const ref=useRef(null),raf2=useRef(null),t=useRef(0);
+  useEffect(()=>{
+    const c=ref.current,ctx=c.getContext("2d");
+    const loop=()=>{ t.current++; ctx.clearRect(0,0,90,90); drawBlob(ctx,45,52,col,1,t.current,true,false,false,false,costume||null); raf2.current=requestAnimationFrame(loop); };
+    raf2.current=requestAnimationFrame(loop);
+    return()=>cancelAnimationFrame(raf2.current);
+  },[col,sword]);
+  return <canvas ref={ref} width={90} height={90} style={{animation:"blobFloat 2s ease-in-out infinite"}}/>;
+}
+
+// ══════════════════════════════════════════════════════════
+// AYARLAR
+// ══════════════════════════════════════════════════════════
+function SettingsModal({ s, onChange, onClose, onQuit }) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16,overflowY:"auto"}}>
+      <div style={{background:"linear-gradient(135deg,#0d001f,#1a0035)",border:"1px solid rgba(168,85,247,0.45)",borderRadius:18,padding:"22px 18px",width:"100%",maxWidth:400,fontFamily:"'Courier New',monospace"}}>
+        <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:22,color:"#a78bfa",letterSpacing:3,marginBottom:18,textAlign:"center"}}>⚙️ AYARLAR</div>
+
+        {/* Ses ayarları */}
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:9,letterSpacing:4,marginBottom:10}}>🔊 SES</div>
+        {[
+          {l:"Müzik Sesi",  k:"vol",    mn:0, mx:1,   st:0.05, fmt:v=>Math.round(v*100)+"%"},
+          {l:"SFX Sesi",    k:"sfxVol", mn:0, mx:1,   st:0.05, fmt:v=>Math.round(v*100)+"%"},
+        ].map(({l,k,mn,mx,st,fmt})=>(
+          <div key={k} style={{marginBottom:14}}>
+            <div style={{color:"rgba(255,255,255,0.55)",fontSize:11,letterSpacing:1,marginBottom:6,display:"flex",justifyContent:"space-between"}}>
+              <span>{l}</span><span style={{color:"#a78bfa"}}>{fmt(s[k]??s.vol)}</span>
+            </div>
+            <input type="range" min={mn} max={mx} step={st} value={s[k]??s.vol}
+              onChange={e=>{const v=parseFloat(e.target.value);const ns={...s,[k]:v};onChange(ns);if(k==="vol")AudioMgr.setVol(v);}}
+              style={{width:"100%",accentColor:"#a78bfa",height:6}}/>
+          </div>
+        ))}
+
+        {/* Kontrol ayarları */}
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:9,letterSpacing:4,marginBottom:10,marginTop:6}}>🎮 KONTROL</div>
+        <div style={{marginBottom:14}}>
+          <div style={{color:"rgba(255,255,255,0.55)",fontSize:11,letterSpacing:1,marginBottom:6,display:"flex",justifyContent:"space-between"}}>
+            <span>Buton Boyutu</span><span style={{color:"#a78bfa"}}>{s.btnSz}px</span>
+          </div>
+          <input type="range" min={50} max={115} step={5} value={s.btnSz}
+            onChange={e=>onChange({...s,btnSz:parseFloat(e.target.value)})}
+            style={{width:"100%",accentColor:"#a78bfa",height:6}}/>
+        </div>
+        <div style={{marginBottom:14}}>
+          <div style={{color:"rgba(255,255,255,0.55)",fontSize:11,letterSpacing:1,marginBottom:8}}>Titreşim</div>
+          <div style={{display:"flex",gap:8}}>
+            {["Açık","Kapalı"].map(v2=>(
+              <button key={v2} onClick={()=>onChange({...s,vibration:v2==="Açık"})}
+                style={{flex:1,background:((s.vibration!==false)===( v2==="Açık"))?"rgba(167,139,250,0.35)":"rgba(255,255,255,0.06)",border:`1px solid ${((s.vibration!==false)===(v2==="Açık"))?"#a78bfa":"rgba(255,255,255,0.15)"}`,borderRadius:8,padding:"8px",color:(s.vibration!==false)===(v2==="Açık")?"#a78bfa":"#666",fontSize:11,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                {v2}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Grafik ayarları */}
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:9,letterSpacing:4,marginBottom:10,marginTop:6}}>🖥️ GRAFİK</div>
+        <div style={{marginBottom:14}}>
+          <div style={{color:"rgba(255,255,255,0.55)",fontSize:11,letterSpacing:1,marginBottom:8}}>Parçacık Efektleri</div>
+          <div style={{display:"flex",gap:8}}>
+            {["Yüksek","Düşük","Kapalı"].map(v3=>(
+              <button key={v3} onClick={()=>onChange({...s,particles:v3})}
+                style={{flex:1,background:(s.particles||"Yüksek")===v3?"rgba(167,139,250,0.35)":"rgba(255,255,255,0.06)",border:`1px solid ${(s.particles||"Yüksek")===v3?"#a78bfa":"rgba(255,255,255,0.15)"}`,borderRadius:8,padding:"7px 4px",color:(s.particles||"Yüksek")===v3?"#a78bfa":"#666",fontSize:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                {v3}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{marginBottom:14}}>
+          <div style={{color:"rgba(255,255,255,0.55)",fontSize:11,letterSpacing:1,marginBottom:8}}>Ekran Titremesi</div>
+          <div style={{display:"flex",gap:8}}>
+            {["Açık","Kapalı"].map(v4=>(
+              <button key={v4} onClick={()=>onChange({...s,screenShake:v4==="Açık"})}
+                style={{flex:1,background:((s.screenShake!==false)===(v4==="Açık"))?"rgba(167,139,250,0.35)":"rgba(255,255,255,0.06)",border:`1px solid ${((s.screenShake!==false)===(v4==="Açık"))?"#a78bfa":"rgba(255,255,255,0.15)"}`,borderRadius:8,padding:"8px",color:(s.screenShake!==false)===(v4==="Açık")?"#a78bfa":"#666",fontSize:11,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                {v4}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Görsel seçenekler */}
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:9,letterSpacing:4,marginBottom:10,marginTop:6}}>🎨 GÖRÜNÜM</div>
+        <div style={{marginBottom:14}}>
+          <div style={{color:"rgba(255,255,255,0.55)",fontSize:11,letterSpacing:1,marginBottom:8}}>Vurgu Rengi</div>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+            {["#a78bfa","#4d96ff","#4ade80","#f87171","#fbbf24","#f472b6","#66d9e8","#ff922b","#34d399","#fb7185"].map(c=>(
+              <button key={c} onClick={()=>onChange({...s,accent:c})}
+                style={{width:30,height:30,borderRadius:"50%",background:c,border:s.accent===c?"3px solid #fff":"2px solid transparent",cursor:"pointer",boxShadow:s.accent===c?`0 0 14px ${c}`:"none",WebkitTapHighlightColor:"transparent"}}/>
+            ))}
+          </div>
+        </div>
+        <div style={{marginBottom:18}}>
+          <div style={{color:"rgba(255,255,255,0.55)",fontSize:11,letterSpacing:1,marginBottom:8}}>Tema</div>
+          <div style={{display:"flex",gap:8}}>
+            {[["Koyu","dark"],["Mor","purple"],["Deniz","ocean"]].map(([l5,v5])=>(
+              <button key={v5} onClick={()=>onChange({...s,theme:v5})}
+                style={{flex:1,background:(s.theme||"dark")===v5?"rgba(167,139,250,0.35)":"rgba(255,255,255,0.06)",border:`1px solid ${(s.theme||"dark")===v5?"#a78bfa":"rgba(255,255,255,0.15)"}`,borderRadius:8,padding:"8px",color:(s.theme||"dark")===v5?"#a78bfa":"#666",fontSize:11,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                {l5}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:10,flexDirection:"column"}}>
+          <div style={{display:"flex",gap:10}}>
+            <button onClick={onClose}
+              style={{flex:1,background:"linear-gradient(135deg,#a78bfa,#7c3aed)",border:"none",color:"#fff",padding:"14px",fontFamily:"'Fredoka One',sans-serif",fontSize:17,letterSpacing:2,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent"}}>
+              ✓ KAYDET
+            </button>
+            <button onClick={()=>onChange({vol:0.35,sfxVol:0.35,btnSz:68,accent:"#a78bfa",vibration:true,particles:"Yüksek",screenShake:true,theme:"dark"})}
+              style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.4)",padding:"14px 12px",fontFamily:"'Courier New',monospace",fontSize:10,letterSpacing:2,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent"}}>
+              🔄 Sıfırla
+            </button>
+          </div>
+          {onQuit && (
+            <button onClick={onQuit}
+              style={{width:"100%",background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.4)",color:"#ef4444",padding:"12px",fontFamily:"'Courier New',monospace",fontSize:12,letterSpacing:3,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent"}}>
+              🚪 OYUNDAN ÇIK
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// MENÜ
+// ══════════════════════════════════════════════════════════
+function Menu({ unlocked, best, cfg, coins, equippedCostume, activeHero, dailyQuests, stats, onCfg, onShop, onHeroShop, onStart, onTutorial }) {
+  const [selId,  setSelId]  = useState(0);
+  const [selCol, setSelCol] = useState(PCOLS[0]);
+  const [page,   setPage]   = useState(0);
+
+  useEffect(() => {
+    AudioMgr.init();
+    // iOS için kullanıcı etkileşimi bekle, sonra başlat
+    const tryPlay = () => { AudioMgr.init(); if (AudioMgr.ctx && AudioMgr.ctx.state === "suspended") AudioMgr.ctx.resume(); AudioMgr.startMusic("menu"); };
+    tryPlay();
+    // Eğer hemen çalmadıysa ilk dokunuşta başlat
+    const onTouch = () => { tryPlay(); window.removeEventListener("touchstart", onTouch); window.removeEventListener("click", onTouch); };
+    window.addEventListener("touchstart", onTouch, { once: true });
+    window.addEventListener("click", onTouch, { once: true });
+    return () => AudioMgr.stopMusic();
+  }, []);
+
+  const lv = ALL[selId];
+  const locked = selId > 0 && !unlocked.includes(selId);
+  const vis = ALL.slice(page*10, page*10+10);
+
+  return (
+    <div style={{minHeight:"100dvh",background:"linear-gradient(160deg,#04040f,#0d0020,#04040f)",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",alignItems:"center",overflowY:"auto",padding:"18px 14px 52px"}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        html,body{height:100%;background:#04040f;-webkit-text-size-adjust:100%}
+        @keyframes blobFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+        @keyframes titleGlow{0%,100%{text-shadow:0 0 26px #00ffff88}50%{text-shadow:0 0 72px #00ffffcc}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes bossGlow{0%,100%{box-shadow:0 0 10px #ff224444}50%{box-shadow:0 0 34px #ff2244bb}}
+        @keyframes rainbow{0%{filter:hue-rotate(0deg)}100%{filter:hue-rotate(360deg)}}
+        .lvb{transition:all 0.12s} .lvb:active{transform:scale(0.92)!important}
+        input[type=range]{height:6px;border-radius:3px;cursor:pointer}
+        ::-webkit-scrollbar{width:3px} ::-webkit-scrollbar-thumb{background:#2a2a4a;border-radius:2px}
+      `}</style>
+
+      {/* Başlık */}
+      <div style={{width:"100%",maxWidth:420,display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,animation:"fadeUp 0.4s ease"}}>
+        <div style={{textAlign:"center",flex:1}}>
+          <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:"clamp(38px,10vw,62px)",color:"#00ffff",animation:"titleGlow 2.5s ease-in-out infinite",letterSpacing:4,lineHeight:1}}>🫧 BlobRun</div>
+          <div style={{color:"rgba(0,255,255,0.28)",fontSize:9,letterSpacing:5,marginTop:3}}>100 BÖLÜM · 10 BOSS · ⚔️ KILIC · 👾 MİNYON</div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <div style={{background:"rgba(253,224,71,0.15)",border:"1px solid rgba(253,224,71,0.35)",borderRadius:8,padding:"5px 10px",color:"#fde047",fontSize:12,fontWeight:700,letterSpacing:1}}>🪙{coins}</div>
+          <button onClick={onHeroShop} style={{background:"rgba(168,85,247,0.18)",border:"1px solid rgba(168,85,247,0.4)",borderRadius:10,padding:"6px 10px",cursor:"pointer",color:"#c084fc",fontSize:18,WebkitTapHighlightColor:"transparent"}} title="Kahraman Seç">⚔️</button>
+          <button onClick={onShop} style={{background:"rgba(99,102,241,0.18)",border:"1px solid rgba(99,102,241,0.4)",borderRadius:10,padding:"6px 10px",cursor:"pointer",color:"#818cf8",fontSize:18,WebkitTapHighlightColor:"transparent"}} title="Kostüm Mağazası">🛍️</button>
+          <button onClick={onCfg} style={{background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:10,padding:"6px 10px",cursor:"pointer",color:"#fff",fontSize:18,WebkitTapHighlightColor:"transparent"}}>⚙️</button>
+        </div>
+      </div>
+
+      {/* Blob + renk */}
+      <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:14,width:"100%",maxWidth:420,animation:"fadeUp 0.5s ease"}}>
+        <div style={{textAlign:"center"}}>
+          <BlobPrev col={equippedCostume ? equippedCostume.col : selCol} sword={lv.hasSword} costume={equippedCostume}/>
+          <div style={{color:"rgba(255,255,255,0.25)",fontSize:8,letterSpacing:2,marginTop:2}}>KARAKTERİN</div>
+        {activeHero && (
+          <div style={{marginTop:4,background:`${activeHero.glow}22`,border:`1px solid ${activeHero.glow}55`,borderRadius:6,padding:"3px 7px",textAlign:"center",cursor:"pointer"}} onClick={onHeroShop}>
+            <div style={{fontSize:13}}>{activeHero.emoji}</div>
+            <div style={{fontSize:7,color:activeHero.glow,letterSpacing:1}}>{activeHero.name}</div>
+            <div style={{fontSize:7,color:"rgba(255,255,255,0.3)"}}>{activeHero.powerEmoji} {activeHero.powerName}</div>
+          </div>
+        )}
+        </div>
+        <div style={{flex:1}}>
+          <div style={{color:"rgba(255,255,255,0.35)",fontSize:9,letterSpacing:3,marginBottom:8}}>🎨 RENK SEÇ</div>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+            {PCOLS.map(c=>(
+              <button key={c} onClick={()=>setSelCol(c)}
+                style={{width:30,height:30,borderRadius:"50%",background:c,cursor:"pointer",border:selCol===c?"3px solid #fff":"2px solid transparent",boxShadow:selCol===c?`0 0 16px ${c}`:"none",transform:selCol===c?"scale(1.3)":"scale(1)",transition:"all 0.14s",WebkitTapHighlightColor:"transparent"}}/>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Günlük görevler */}
+      <div style={{width:"100%",maxWidth:420,marginBottom:12,animation:"fadeUp 0.52s ease"}}>
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:9,letterSpacing:4,marginBottom:8}}>📅 GÜNLÜK GÖREVLER</div>
+        <div style={{display:"flex",flexDirection:"column",gap:5}}>
+          {dailyQuests && dailyQuests.slice(0,3).map((q,qi)=>(
+            <div key={qi} style={{display:"flex",alignItems:"center",gap:10,background:q.done?"rgba(74,222,128,0.12)":"rgba(255,255,255,0.04)",border:`1px solid ${q.done?"rgba(74,222,128,0.35)":"rgba(255,255,255,0.08)"}`,borderRadius:8,padding:"7px 10px"}}>
+              <span style={{fontSize:16}}>{q.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{color:q.done?"#4ade80":"rgba(255,255,255,0.6)",fontSize:10,letterSpacing:0.5}}>{q.desc}</div>
+                <div style={{background:"rgba(255,255,255,0.1)",height:3,borderRadius:2,marginTop:3}}>
+                  <div style={{height:"100%",background:q.done?"#4ade80":"#a78bfa",width:`${Math.min(100,(q.progress/q.target)*100)}%`,borderRadius:2}}/>
+                </div>
+              </div>
+              <div style={{color:"#fde047",fontSize:9,fontWeight:700,whiteSpace:"nowrap"}}>🪙{q.reward}</div>
+              {q.done && <div style={{color:"#4ade80",fontSize:12}}>✓</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Harita şeridi */}
+      <div style={{width:"100%",maxWidth:420,marginBottom:12,display:"flex",gap:4,flexWrap:"wrap",animation:"fadeUp 0.55s ease"}}>
+        {MAPS.map((m,i)=>{
+          const fp=i*10, mu=unlocked.some(u=>u>=fp&&u<fp+10)||fp===0, ac=Math.floor(selId/10)===i;
+          return (
+            <div key={m.id} onClick={()=>{if(mu)setSelId(fp);}}
+              style={{flex:"1 1 50px",background:ac?`${m.c}22`:"rgba(255,255,255,0.03)",border:`1px solid ${ac?m.c:"rgba(255,255,255,0.07)"}`,borderRadius:8,padding:"5px 3px",textAlign:"center",opacity:mu?1:0.3,cursor:mu?"pointer":"default",transition:"all 0.14s"}}>
+              <div style={{fontSize:13}}>{m.e}</div>
+              <div style={{fontSize:7,color:ac?m.c:"rgba(255,255,255,0.3)",marginTop:1,lineHeight:1.2}}>{m.n}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Sayfa nav */}
+      <div style={{width:"100%",maxWidth:420,animation:"fadeUp 0.6s ease"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+          <div style={{color:"rgba(255,255,255,0.3)",fontSize:9,letterSpacing:3}}>{page*10+1}–{Math.min(page*10+10,100)} | {unlocked.length}/100 açık</div>
+          <div style={{display:"flex",gap:4}}>
+            {Array.from({length:10},(_,p)=>(
+              <button key={p} onClick={()=>setPage(p)}
+                style={{width:22,height:22,borderRadius:5,background:page===p?"#00ffff":"rgba(255,255,255,0.09)",border:"none",color:page===p?"#000":"rgba(255,255,255,0.4)",fontSize:9,cursor:"pointer",fontWeight:page===p?"700":"400",WebkitTapHighlightColor:"transparent"}}>
+                {p+1}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Grid 2x5 */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:12}}>
+          {vis.map(lv2=>{
+            const lk=lv2.id>0&&!unlocked.includes(lv2.id), sel=selId===lv2.id, done=best[lv2.id];
+            return (
+              <button key={lv2.id} className="lvb" onClick={()=>{if(!lk)setSelId(lv2.id);}}
+                style={{background:lk?"rgba(255,255,255,0.02)":lv2.isBoss?sel?"rgba(255,34,68,0.24)":"rgba(255,34,68,0.09)":sel?`${lv2.map.c}22`:"rgba(255,255,255,0.05)",border:`2px solid ${lk?"rgba(255,255,255,0.05)":lv2.isBoss?sel?"#ff2244":"rgba(255,34,68,0.3)":sel?lv2.map.c:"rgba(255,255,255,0.11)"}`,borderRadius:10,padding:"11px 8px",cursor:lk?"not-allowed":"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,opacity:lk?0.34:1,WebkitTapHighlightColor:"transparent",animation:lv2.isBoss&&!lk&&sel?"bossGlow 1.5s infinite":"none"}}>
+                <span style={{fontSize:19,filter:lk?"grayscale(1) opacity(0.5)":"none",animation:lv2.id===99&&!lk?"rainbow 2s infinite":"none"}}>{lk?"🔒":lv2.emoji}</span>
+                <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:11,color:lk?"#333":lv2.isBoss?"#ff4466":sel?lv2.map.c:"#ccc",textAlign:"center",lineHeight:1.2}}>{lv2.name}</div>
+                <div style={{fontSize:7,color:"rgba(255,255,255,0.2)"}}>Lv.{lv2.id+1}{lv2.isBoss?" 👹":""}{lv2.hasSword?" ⚔️":""}{lv2.minions>0?" 👾":""}</div>
+                {done&&<div style={{fontSize:9,color:"#4ade80"}}>✓</div>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Detay */}
+        <div style={{background:lv.isBoss?"rgba(255,34,68,0.1)":`${lv.map.c}12`,border:`1px solid ${lv.isBoss?"rgba(255,34,68,0.3)":lv.map.c+"28"}`,borderRadius:12,padding:"12px 14px",marginBottom:12,display:"flex",gap:12,alignItems:"center"}}>
+          <span style={{fontSize:30}}>{lv.emoji}</span>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:15,color:lv.isBoss?"#ff4466":lv.map.c}}>{lv.name}</div>
+            {lv.isBoss&&lv.boss&&<div style={{fontSize:10,color:"#ff7799",marginTop:2}}>⚡ {lv.boss.ab}</div>}
+            <div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
+              {[["Plt",lv.pCnt],["Hız",`x${lv.spd}`],["Engel",`%${Math.round(lv.obs*100)}`],lv.hasSword?["⚔️","Kılıç"]:null,lv.minions>0?["👾",`${lv.minions}x`]:null,lv.isBoss&&lv.boss?["HP",`${lv.boss.hp}❤️`]:null].filter(Boolean).map(([l,v])=>(
+                <div key={l} style={{background:"rgba(255,255,255,0.07)",borderRadius:5,padding:"2px 7px",fontSize:9,color:"#aaa"}}>
+                  <span style={{color:"#666"}}>{l}: </span><span style={{color:"#fff"}}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Oyna */}
+        {/* Tutorial butonu */}
+        <button onClick={()=>onTutorial()} style={{width:"100%",background:"rgba(74,222,128,0.12)",border:"1px solid rgba(74,222,128,0.35)",color:"#4ade80",padding:"10px",fontFamily:"'Courier New',monospace",fontSize:11,letterSpacing:3,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent",marginBottom:8}}>
+          🎓 NASIL OYNANIR? (Tutorial)
+        </button>
+
+        <button disabled={locked} onClick={()=>{if(!locked){AudioMgr.stopMusic();onStart(lv,selCol);}}}
+          style={{width:"100%",background:locked?"rgba(255,255,255,0.04)":lv.isBoss?"linear-gradient(135deg,#ff2244,#880011)":`linear-gradient(135deg,${lv.map.c}ee,${lv.map.c}77)`,border:"none",color:locked?"#333":lv.isBoss?"#fff":"#000",padding:"17px 0",fontFamily:"'Fredoka One',sans-serif",fontSize:22,letterSpacing:3,cursor:locked?"not-allowed":"pointer",borderRadius:12,boxShadow:locked?"none":lv.isBoss?"0 0 46px rgba(255,34,68,0.58)":`0 0 28px ${lv.map.c}46`,WebkitTapHighlightColor:"transparent"}}>
+          {locked?"🔒 KİLİTLİ":lv.isBoss?`${lv.emoji} BOSS SAVAŞI!`:`${lv.emoji} OYNA!`}
+        </button>
+
+        <div style={{marginTop:12,color:"rgba(255,255,255,0.18)",fontSize:9,letterSpacing:2,textAlign:"center",lineHeight:2.4}}>
+          MOBİL: ◀ ▶ ↑ ⚔️  |  PC: ← → Boşluk X/F=kılıç<br/>
+          Lv.20+⚔️kılıç  |  Lv.30+👾minyonlar  |  Her 10.bölüm👹BOSS
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+// ══════════════════════════════════════════════════════════
+// KAHRAMAN MAĞAZASI
+// ══════════════════════════════════════════════════════════
+function HeroShop({ coins, ownedHeroes, equippedHero, best, onBuy, onEquip, onClose }) {
+  const [hov, setHov] = useState(null);
+  const pvRef = useRef(null); const pvRaf = useRef(null); const pvT = useRef(0);
+  const prevHero = hov!=null ? HEROES.find(h=>h.id===hov) : (equippedHero!=null ? HEROES.find(h=>h.id===equippedHero) : HEROES[0]);
+
+  useEffect(()=>{
+    const c=pvRef.current; if(!c) return;
+    const ctx=c.getContext("2d");
+    const loop=()=>{
+      pvT.current++;
+      ctx.clearRect(0,0,110,110);
+      if(prevHero){
+        // Glow
+        ctx.fillStyle=prevHero.glow+"44";
+        ctx.beginPath(); ctx.arc(55,52,44,0,Math.PI*2); ctx.fill();
+        drawBlob(ctx,55,52,prevHero.col,1,pvT.current,true,false,true,false,null);
+      }
+      pvRaf.current=requestAnimationFrame(loop);
+    };
+    pvRaf.current=requestAnimationFrame(loop);
+    return()=>cancelAnimationFrame(pvRaf.current);
+  },[prevHero?.id]);
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#040008,#0a0018)",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",zIndex:55}}>
+      <style>{`@keyframes heroPulse{0%,100%{box-shadow:0 0 12px currentColor}50%{box-shadow:0 0 28px currentColor}}`}</style>
+
+      {/* Üst bar */}
+      <div style={{display:"flex",alignItems:"center",padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.08)",flexShrink:0,gap:10}}>
+        <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:18,color:"#c084fc",letterSpacing:3}}>⚔️ KAHRAMAN SEÇ</div>
+        <div style={{flex:1}}/>
+        <div style={{background:"rgba(253,224,71,0.15)",border:"1px solid rgba(253,224,71,0.4)",borderRadius:8,padding:"5px 10px",color:"#fde047",fontSize:12,fontWeight:700}}>🪙{coins}</div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"5px 10px",color:"#fff",fontSize:14,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>✕</button>
+      </div>
+
+      {/* Önizleme + bilgi */}
+      <div style={{display:"flex",gap:12,padding:"10px 14px",borderBottom:"1px solid rgba(255,255,255,0.06)",flexShrink:0,alignItems:"center"}}>
+        <div style={{textAlign:"center",flexShrink:0}}>
+          <canvas ref={pvRef} width={110} height={110} style={{animation:"blobFloat 2s ease-in-out infinite"}}/>
+          <div style={{color:"rgba(255,255,255,0.25)",fontSize:8,letterSpacing:2,marginTop:2}}>
+            {prevHero?.name}
+          </div>
+        </div>
+        {prevHero && (
+          <div style={{flex:1,background:`${prevHero.glow}18`,border:`1px solid ${prevHero.glow}44`,borderRadius:10,padding:"10px 12px"}}>
+            <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:16,color:prevHero.glow,marginBottom:4}}>{prevHero.powerEmoji} {prevHero.powerName}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",lineHeight:1.5,marginBottom:6}}>{prevHero.powerDesc}</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {[["⚔️ Kılıç",prevHero.swordDmg+"x"],["💥 Boss",prevHero.bossDmg+"x"],["⏱️ Süre",prevHero.dur>=9000?"∞":Math.ceil(prevHero.dur/60)+"s"],["🔁 CD",prevHero.cd>=9000?"1 kez":Math.ceil(prevHero.cd/60)+"s"]].map(([l,v])=>(
+                <div key={l} style={{background:"rgba(255,255,255,0.07)",borderRadius:5,padding:"2px 7px",fontSize:9,color:"#aaa"}}>
+                  <span style={{color:"#555"}}>{l}: </span><span style={{color:"#fff"}}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Hero grid */}
+      <div style={{flex:1,overflowY:"auto",padding:"8px 12px",WebkitOverflowScrolling:"touch"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:7}}>
+          {HEROES.map(h=>{
+            const unlocked2 = ownedHeroes.includes(h.id) || isHeroUnlocked(h,best);
+            const isEq = equippedHero===h.id;
+            const canAfford = coins >= h.price;
+            const alreadyOwned = ownedHeroes.includes(h.id);
+            return(
+              <div key={h.id}
+                onMouseEnter={()=>setHov(h.id)} onMouseLeave={()=>setHov(null)}
+                onTouchStart={()=>setHov(h.id)}
+                style={{background:isEq?`${h.glow}28`:unlocked2?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.02)",border:`2px solid ${isEq?h.glow:unlocked2?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)"}`,borderRadius:10,padding:"9px 6px",textAlign:"center",cursor:"pointer",opacity:!unlocked2&&!canAfford?0.42:1,transition:"all 0.12s",boxShadow:isEq?`0 0 16px ${h.glow}66`:"none"}}>
+                <div style={{fontSize:22,marginBottom:4,filter:!unlocked2?"grayscale(1) opacity(0.5)":"none"}}>{h.emoji}</div>
+                <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:10,color:isEq?h.glow:unlocked2?"#ddd":"#444",lineHeight:1.2,marginBottom:3}}>{h.name}</div>
+                <div style={{fontSize:8,color:h.glow,opacity:0.8,marginBottom:4}}>{h.powerEmoji}</div>
+                {!unlocked2 && !alreadyOwned && <div style={{fontSize:8,color:canAfford?"#fde047":"#ef4444"}}>🪙{h.price}</div>}
+                {!unlocked2 && !alreadyOwned && <div style={{fontSize:7,color:"rgba(255,255,255,0.3)",marginTop:2}}>{h.unlock}</div>}
+                {(unlocked2||alreadyOwned) && !isEq && <div style={{fontSize:7,color:"#4ade80"}}>✓ Sahip</div>}
+                <button
+                  onClick={e=>{e.stopPropagation();
+                    if(isEq) return;
+                    if(unlocked2||alreadyOwned){ onEquip(h.id); }
+                    else if(canAfford){ onBuy(h.id); }
+                  }}
+                  style={{marginTop:4,width:"100%",background:isEq?"#fbbf24":unlocked2||alreadyOwned?"#7c3aed":canAfford?"#4f46e5":"#374151",border:"none",color:isEq?"#000":"#fff",padding:"4px 0",borderRadius:5,fontSize:8,cursor:(unlocked2||canAfford||alreadyOwned)?"pointer":"not-allowed",fontWeight:700,WebkitTapHighlightColor:"transparent"}}>
+                  {isEq?"KUŞANILDI":unlocked2||alreadyOwned?"SEÇL":canAfford?"SATIN AL":"🔒"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{height:20}}/>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// MAĞAZA
+// ══════════════════════════════════════════════════════════
+function Shop({ coins, owned, equipped, onBuy, onEquip, onClose }) {
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const filtered = COSTUMES.filter(c => {
+    if (filter === "boss") return c.bossReward === true;
+    if (filter !== "all" && c.rarity !== filter) return false;
+    if (filter === "all") return true;
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+  const previewRef = useRef(null);
+  const [hovered, setHovered] = useState(null);
+  const pvRaf = useRef(null); const pvTick = useRef(0);
+
+  useEffect(() => {
+    const c = previewRef.current; if (!c) return;
+    const ctx = c.getContext("2d");
+    const prev = hovered ? COSTUMES.find(x=>x.id===hovered) : (equipped != null ? COSTUMES.find(x=>x.id===equipped) : null);
+    const loop = () => {
+      pvTick.current++;
+      ctx.clearRect(0,0,110,110);
+      const col = prev ? prev.col : "#ff6b6b";
+      drawBlob(ctx, 55, 62, col, 1, pvTick.current, true, false, false, false, prev);
+      pvRaf.current = requestAnimationFrame(loop);
+    };
+    pvRaf.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(pvRaf.current);
+  }, [hovered, equipped]);
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#04040f,#0d0020,#04040f)",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",zIndex:50}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        .citem:active{transform:scale(0.95)!important}
+        ::-webkit-scrollbar{width:3px} ::-webkit-scrollbar-thumb{background:#2a2a4a}
+      `}</style>
+
+      {/* Üst bar */}
+      <div style={{display:"flex",alignItems:"center",padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,0.08)",flexShrink:0,gap:12}}>
+        <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:20,color:"#fde047",letterSpacing:3}}>🛍️ KOSTÜM MAĞAZASI</div>
+        <div style={{flex:1}}/>
+        <div style={{background:"rgba(253,224,71,0.15)",border:"1px solid rgba(253,224,71,0.4)",borderRadius:8,padding:"6px 12px",color:"#fde047",fontSize:13,fontWeight:700}}>🪙 {coins}</div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"6px 12px",color:"#fff",fontSize:13,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>✕</button>
+      </div>
+
+      {/* Preview + Filtre */}
+      <div style={{display:"flex",gap:12,padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.06)",flexShrink:0,alignItems:"center"}}>
+        <div style={{textAlign:"center",flexShrink:0}}>
+          <canvas ref={previewRef} width={110} height={110} style={{animation:"blobFloat 2s ease-in-out infinite"}}/>
+          <div style={{color:"rgba(255,255,255,0.3)",fontSize:8,letterSpacing:2,marginTop:2}}>
+            {hovered!=null ? COSTUMES.find(c=>c.id===hovered)?.name : equipped!=null ? "KUŞANILAN" : "ÖNIZLEME"}
+          </div>
+        </div>
+        <div style={{flex:1}}>
+          {/* Arama */}
+          <input placeholder="🔍 Ara..." value={search} onChange={e=>setSearch(e.target.value)}
+            style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"7px 10px",color:"#fff",fontSize:11,marginBottom:8,outline:"none",fontFamily:"'Courier New',monospace"}}/>
+          {/* Nadirlik filtresi */}
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {[["all","Tümü","#fff"],["common","Yaygın","#94a3b8"],["rare","Nadir","#60a5fa"],["epic","Epik","#a78bfa"],["legendary","Efsane","#fbbf24"],["boss","Boss","#ff4466"]].map(([k,l,c])=>(
+              <button key={k} onClick={()=>setFilter(k)}
+                style={{background:filter===k?`${c}22`:"rgba(255,255,255,0.04)",border:`1px solid ${filter===k?c:"rgba(255,255,255,0.1)"}`,borderRadius:6,padding:"4px 8px",color:filter===k?c:"rgba(255,255,255,0.4)",fontSize:9,cursor:"pointer",letterSpacing:1,WebkitTapHighlightColor:"transparent"}}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Kostüm grid */}
+      <div style={{flex:1,overflowY:"auto",padding:"10px 12px",WebkitOverflowScrolling:"touch"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(100px,1fr))",gap:8}}>
+          {filtered.map(c => {
+            const isOwned   = c.id===0 || owned.includes(c.id);
+            const isEquipped = equipped === c.id;
+            const canAfford = coins >= c.price;
+            const rs = RARITY_STYLE[c.rarity];
+            return (
+              <div key={c.id} className="citem"
+                onMouseEnter={()=>setHovered(c.id)} onMouseLeave={()=>setHovered(null)}
+                onTouchStart={()=>setHovered(c.id)}
+                style={{background:isEquipped?`${rs.color}22`:isOwned?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.03)",border:`2px solid ${isEquipped?rs.color:isOwned?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.07)"}`,borderRadius:10,padding:"8px 6px",textAlign:"center",cursor:"pointer",transition:"all 0.12s",opacity:!isOwned&&!canAfford?0.45:1,boxShadow:isEquipped?`0 0 14px ${rs.glow}`:isOwned?`0 0 6px ${rs.glow}`:"none"}}>
+                {/* Renk daire */}
+                <div style={{width:36,height:36,borderRadius:"50%",background:c.col,margin:"0 auto 5px",boxShadow:`0 0 12px ${c.col}88`,border:isEquipped?"2px solid #fff":"none",fontSize:isEquipped?10:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700}}>
+                  {isEquipped?"✓":""}
+                </div>
+                <div style={{fontSize:9,color:rs.color,letterSpacing:0.5,lineHeight:1.2,fontWeight:700}}>{c.name}</div>
+                <div style={{fontSize:7,color:"rgba(255,255,255,0.25)",marginTop:1}}>{c.bossReward?"👹Boss Ödülü":rs.label}</div>
+                {!isOwned && !c.bossReward && <div style={{fontSize:8,color:canAfford?"#fde047":"#ef4444",marginTop:3}}>🪙{c.price}</div>}
+                {!isOwned && c.bossReward && <div style={{fontSize:8,color:"#ff4466",marginTop:3}}>Boss'u yen!</div>}
+                {isOwned && !isEquipped && <div style={{fontSize:7,color:"#4ade80",marginTop:3}}>SAHİP</div>}
+
+                {/* Aksiyon butonu */}
+                <button
+                  onClick={e=>{e.stopPropagation(); isOwned ? onEquip(c.id) : (!c.bossReward && canAfford && onBuy(c.id));}}
+                  style={{marginTop:5,width:"100%",background:isEquipped?"#fbbf24":isOwned?"#4ade80":c.bossReward?"#7f1d1d":canAfford?"#6366f1":"#374151",border:"none",color:isEquipped||isOwned?"#000":"#fff",padding:"4px 0",borderRadius:5,fontSize:8,cursor:isOwned?"pointer":"not-allowed",fontWeight:700,WebkitTapHighlightColor:"transparent",letterSpacing:0.5}}>
+                  {isEquipped?"KUŞANILDI":isOwned?"KUŞAN":c.bossReward?"🔒 BOSS":"YETERSİZ"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{height:20}}/>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// KAZANMA / ÖLÜM
+// ══════════════════════════════════════════════════════════
+function WinScreen({ lv, reward, totalCoins, bossCostume, onReplay, onMenu, onNext }) {
+  const next = ALL[lv.id+1];
+  useEffect(()=>{ AudioMgr.init(); AudioMgr.startMusic("menu"); setTimeout(()=>{ AudioMgr.sfx("win"); },100); return ()=>AudioMgr.stopMusic(); },[]);
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.94)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",padding:24}}>
+      <style>{`@keyframes pop{from{transform:scale(0.15);opacity:0}to{transform:scale(1);opacity:1}} @keyframes coinPop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.3)}100%{transform:scale(1);opacity:1}}`}</style>
+      <div style={{animation:"pop 0.45s cubic-bezier(0.34,1.56,0.64,1)",textAlign:"center",width:"100%",maxWidth:360}}>
+        <div style={{fontSize:lv.isBoss?72:60,marginBottom:10}}>{lv.isTutorial?"🎓":lv.isBoss?"💀🏆":"🏆"}</div>
+        <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:32,color:lv.isBoss?"#ff4466":lv.map.c,letterSpacing:3,marginBottom:6}}>{lv.isTutorial?"TUTORIAL BİTTİ!":lv.isBoss?"BOSS YENİLDİ!":"TEBRİKLER!"}</div>
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:11,letterSpacing:3,marginBottom:16}}>{lv.emoji} {lv.name} · Lv.{lv.id+1}</div>
+        <div style={{background:"linear-gradient(135deg,rgba(253,224,71,0.18),rgba(253,224,71,0.06))",border:"1px solid rgba(253,224,71,0.4)",borderRadius:12,padding:"14px 20px",marginBottom:bossCostume?12:18,animation:"coinPop 0.5s 0.3s ease both"}}>
+          <div style={{color:"rgba(255,255,255,0.5)",fontSize:10,letterSpacing:3,marginBottom:6}}>ÖDÜL KAZANILDI!</div>
+          <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:28,color:"#fde047",letterSpacing:2}}>🪙 +{reward}</div>
+          <div style={{color:"rgba(253,224,71,0.5)",fontSize:10,marginTop:4}}>Toplam: {totalCoins} 🪙</div>
+        </div>
+        {bossCostume && (
+          <div style={{background:"linear-gradient(135deg,rgba(251,191,36,0.22),rgba(163,72,250,0.15))",border:"2px solid #fbbf24",borderRadius:14,padding:"16px 20px",marginBottom:18,animation:"coinPop 0.5s 0.5s ease both",textAlign:"center"}}>
+            <div style={{fontSize:9,letterSpacing:4,color:"#fbbf24",marginBottom:8}}>✨ BOSS KOSTÜMÜ KAZANILDI!</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14}}>
+              <div style={{width:48,height:48,borderRadius:"50%",background:bossCostume.col,boxShadow:`0 0 20px ${bossCostume.col}`,flexShrink:0}}/>
+              <div style={{textAlign:"left"}}>
+                <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:18,color:"#fbbf24",letterSpacing:1}}>{bossCostume.name}</div>
+                <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:2,letterSpacing:2}}>Efsane Kostüm · Otomatik Giyildi!</div>
+              </div>
+            </div>
+          </div>
+        )}
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {next&&<button onClick={onNext} style={{background:next.isBoss?"linear-gradient(135deg,#ff2244,#880011)":`linear-gradient(135deg,${next.map.c},${next.map.c}88)`,border:"none",color:next.isBoss?"#fff":"#000",padding:"15px",fontFamily:"'Fredoka One',sans-serif",fontSize:16,letterSpacing:2,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent"}}>{next.emoji} {next.name} →</button>}
+          {!next&&<div style={{color:"#ffd700",fontSize:13,padding:"14px",border:"1px solid #ffd70044",borderRadius:10,textAlign:"center"}}>🎉 100 BÖLÜM TAMAMLANDI!</div>}
+          <button onClick={onReplay} style={{background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.18)",color:"#fff",padding:"12px",fontFamily:"'Courier New',monospace",fontSize:12,letterSpacing:3,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent"}}>🔄 TEKRAR</button>
+          <button onClick={onMenu} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.09)",color:"rgba(255,255,255,0.4)",padding:"11px",fontFamily:"'Courier New',monospace",fontSize:11,letterSpacing:3,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent"}}>← MENÜ</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeathScreen({ lv, onReplay, onMenu }) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",padding:24}}>
+      <div style={{textAlign:"center",width:"100%",maxWidth:360}}>
+        <div style={{fontSize:58,marginBottom:10}}>{lv.isBoss?"👹":"💀"}</div>
+        <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:32,color:"#ef4444",letterSpacing:4,marginBottom:6}}>{lv.isBoss?"BOSS SENİ YEDİ!":"ÖLDÜN!"}</div>
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:11,letterSpacing:3,marginBottom:28}}>{lv.emoji} {lv.name}</div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <button onClick={onReplay} style={{background:"linear-gradient(135deg,#ef4444,#dc2626)",border:"none",color:"#fff",padding:"16px",fontFamily:"'Fredoka One',sans-serif",fontSize:18,letterSpacing:3,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent"}}>🔄 TEKRAR</button>
+          <button onClick={onMenu} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.09)",color:"rgba(255,255,255,0.4)",padding:"11px",fontFamily:"'Courier New',monospace",fontSize:11,letterSpacing:3,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent"}}>← MENÜ</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// KAYIT SİSTEMİ
+// ══════════════════════════════════════════════════════════
+const SAVE_KEY = "parkur_save_v2";
+
+function loadSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e) { return null; }
+}
+
+function writeSave(data) {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+function deleteSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
+}
+
+// Kayıt yükleme ekranı
+function SaveScreen({ onLoad, onNew }) {
+  const save = loadSave();
+  if (!save) { onNew(); return null; }
+  return (
+    <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#04040f,#0d0020)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",padding:24}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;background:#04040f}`}</style>
+      <div style={{textAlign:"center",width:"100%",maxWidth:360}}>
+        <div style={{fontSize:52,marginBottom:12}}>💾</div>
+        <div style={{fontFamily:"'Fredoka One',sans-serif",fontSize:28,color:"#00ffff",letterSpacing:3,marginBottom:6}}>KAYIT BULUNDU</div>
+        <div style={{color:"rgba(255,255,255,0.4)",fontSize:11,letterSpacing:2,marginBottom:28,lineHeight:2}}>
+          İlerleme: <span style={{color:"#4ade80"}}>Lv.{save.maxLevel+1}</span> &nbsp;|&nbsp;
+          Açık: <span style={{color:"#fbbf24"}}>{save.unlocked.length}/100</span><br/>
+          Renk: <span style={{color:save.col || "#fff"}}>●</span> &nbsp;|&nbsp;
+          Kaydedildi: <span style={{color:"rgba(255,255,255,0.5)"}}>{save.date || "?"}</span>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <button onClick={()=>onLoad(save)}
+            style={{background:"linear-gradient(135deg,#4ade80,#16a34a)",border:"none",color:"#000",padding:"16px",fontFamily:"'Fredoka One',sans-serif",fontSize:18,letterSpacing:3,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent"}}>
+            ▶ DEVAM ET
+          </button>
+          <button onClick={onNew}
+            style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",padding:"13px",fontFamily:"'Courier New',monospace",fontSize:12,letterSpacing:3,cursor:"pointer",borderRadius:10,WebkitTapHighlightColor:"transparent"}}>
+            🆕 YENİ OYUN
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// ROOT
+// ══════════════════════════════════════════════════════════
+function App() {
+  const [scene,    setScene]    = useState("loading"); // loading -> menu
+  const [lv,       setLv]       = useState(ALL[0]);
+  const [col,      setCol]      = useState(PCOLS[0]);
+  const [gKey,     setGKey]     = useState(0);
+  const [unlocked, setUnlocked] = useState([0]);
+  const [best,     setBest]     = useState({});
+  const [showCfg,  setShowCfg]  = useState(false);
+  const [cfg,      setCfg]      = useState({ vol:0.35, sfxVol:0.35, btnSz:68, accent:"#a78bfa", vibration:true, particles:"Yüksek", screenShake:true, theme:"dark" });
+  const [coins,    setCoins]    = useState(0);
+  const [owned,    setOwned]    = useState([0]);
+  const [equipped, setEquipped] = useState(0);
+  const [showShop,   setShowShop]   = useState(false);
+  const [showHeroShop,setShowHeroShop]=useState(false);
+  const [lastReward, setLastReward] = useState(0);
+  const [ownedHeroes,setOwnedHeroes]= useState([0]);
+  const [equippedHero,setEquippedHero]=useState(0);
+  const [dailyQuests, setDailyQuests] = useState(() => getDailyQuestsForToday());
+  const [dailyDate,   setDailyDate]   = useState(() => Math.floor(Date.now()/86400000));
+  const [stats, setStats] = useState({ totalFinished:0, bossKills:0, maxCombo:0, totalSlash:0, totalDash:0 });
+  const [bossCostume, setBossCostume] = useState(null); // kazanılan boss kostüm id
+
+  const activeCostume = COSTUMES.find(c => c.id === equipped) || null;
+  const activeHero    = HEROES.find(h => h.id === equippedHero) || null;
+
+  // AudioContext kullanıcı etkileşimi olmadan başlatmaya çalış
+  useEffect(() => {
+    try {
+      AudioMgr.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch(e) {}
+    // Başlat
+    const startAudio = () => {
+      AudioMgr.init();
+      if (AudioMgr.ctx?.state === "suspended") AudioMgr.ctx.resume().then(() => AudioMgr.startMusic("menu"));
+      else AudioMgr.startMusic("menu");
+    };
+    startAudio();
+    document.addEventListener("touchstart", startAudio, { once: true });
+    document.addEventListener("click", startAudio, { once: true });
+  }, []);
+
+  // Uygulama açılınca otomatik kayıt yükle
+  useEffect(() => {
+    const save = loadSave();
+    if (save) {
+      setUnlocked(save.unlocked || [0]);
+      setBest(save.best || {});
+      if (save.col) setCol(save.col);
+      if (save.cfg) { setCfg(save.cfg); AudioMgr.setVol(save.cfg.vol); }
+      if (save.coins != null) setCoins(save.coins);
+      if (save.owned) setOwned(save.owned);
+      if (save.equipped != null) setEquipped(save.equipped);
+      if (save.ownedHeroes) setOwnedHeroes(save.ownedHeroes);
+      if (save.equippedHero != null) setEquippedHero(save.equippedHero);
+    }
+    // İlk girişte tutorial
+    const visited = localStorage.getItem("blobrun_visited");
+    // İlk ziyaret kaydedilir, tutorial menüde buton olarak var
+    if (!visited) localStorage.setItem("blobrun_visited","1");
+    setScene("menu");
+  }, []);
+
+  const doSave = useCallback((extra={}) => {
+    if (scene === "save") return;
+    writeSave({ unlocked, best, col, maxLevel:Math.max(...unlocked), date:new Date().toLocaleDateString("tr-TR"), cfg, coins, owned, equipped, ownedHeroes, equippedHero, ...extra });
+  }, [scene, unlocked, best, col, cfg, coins, owned, equipped]);
+
+  useEffect(() => { doSave(); }, [unlocked, best, coins, owned, equipped]);
+
+  const loadGame = useCallback((save) => {
+    setUnlocked(save.unlocked || [0]);
+    setBest(save.best || {});
+    if (save.col) setCol(save.col);
+    if (save.cfg) { setCfg(save.cfg); AudioMgr.setVol(save.cfg.vol); }
+    if (save.coins != null) setCoins(save.coins);
+    if (save.owned) setOwned(save.owned);
+    if (save.equipped != null) setEquipped(save.equipped);
+    if (save.ownedHeroes) setOwnedHeroes(save.ownedHeroes);
+    if (save.equippedHero != null) setEquippedHero(save.equippedHero);
+    setScene("menu");
+  }, []);
+
+  const newGame = useCallback(() => {
+    deleteSave();
+    setUnlocked([0]); setBest({}); setCol(PCOLS[0]);
+    setCoins(0); setOwned([0]); setEquipped(0); setOwnedHeroes([0]); setEquippedHero(0);
+    setScene("menu");
+  }, []);
+
+  const play = useCallback((l, c) => {
+    setLv(l); setCol(c); setGKey(k=>k+1); setScene("game");
+  }, []);
+
+  const handleWin = useCallback(() => {
+    const nid = lv.id+1;
+    const newUnlocked = unlocked.includes(nid) ? unlocked : [...unlocked, nid];
+    const newBest = {...best, [lv.id]: true};
+    const reward = levelReward(lv.id);
+    const newCoins = coins + reward;
+    // Boss ödülü: boss kostümü ver
+    let newOwned = owned;
+    let newEquipped = equipped;
+    let bossCostumeId = null;
+    if (lv.isBoss && lv.boss) {
+      const bdef = BDEFS[lv.boss.id];
+      if (bdef && bdef.costumeId != null && !owned.includes(bdef.costumeId)) {
+        newOwned = [...owned, bdef.costumeId];
+        newEquipped = bdef.costumeId;
+        bossCostumeId = bdef.costumeId;
+      }
+    }
+    // 100. bölüm: tüm boss kostümleri + en iyi karakter (id:29) aç
+    if (lv.id === 99) {
+      const allBossCostumes = BDEFS.map(b=>b.costumeId).filter(id2=>!newOwned.includes(id2));
+      newOwned = [...newOwned, ...allBossCostumes, 39]; // id:39 = Evren (efsane)
+      newEquipped = 63; // Kaos Tanrısı kostümü
+      bossCostumeId = 63;
+    }
+    if (nid < 100) setUnlocked(newUnlocked);
+    setBest(newBest); setCoins(newCoins); setLastReward(reward);
+    setOwned(newOwned); setEquipped(newEquipped);
+    setBossCostume(bossCostumeId);
+    writeSave({ unlocked:newUnlocked, best:newBest, col, maxLevel:Math.max(...newUnlocked), date:new Date().toLocaleDateString("tr-TR"), cfg, coins:newCoins, owned:newOwned, equipped:newEquipped });
+    // Günlük görev güncelle
+    setStats(prev => {
+      const ns = {...prev, totalFinished: prev.totalFinished+1};
+      if (lv.isBoss) ns.bossKills = prev.bossKills+1;
+      return ns;
+    });
+    // Yeni gün kontrolü
+    const today = Math.floor(Date.now()/86400000);
+    if (today !== dailyDate) { setDailyDate(today); setDailyQuests(getDailyQuestsForToday()); }
+    AudioMgr.sfx("unlock");
+    setScene("win");
+  }, [lv, unlocked, best, col, cfg, coins, owned, equipped]);
+
+  const handleBuy = useCallback((cid) => {
+    const c2 = COSTUMES.find(x=>x.id===cid);
+    if (!c2 || coins < c2.price || owned.includes(cid)) return;
+    const nc = coins - c2.price; const no = [...owned, cid];
+    setCoins(nc); setOwned(no); setEquipped(cid);
+    AudioMgr.sfx("unlock");
+  }, [coins, owned]);
+
+  const handleEquip = useCallback((cid) => {
+    setEquipped(cid); AudioMgr.sfx("save");
+  }, []);
+  const handleBuyHero = useCallback((hid) => {
+    const h = HEROES.find(x=>x.id===hid);
+    if (!h || coins < h.price || ownedHeroes.includes(hid)) return;
+    const nc = coins - h.price; const no2 = [...ownedHeroes, hid];
+    setCoins(nc); setOwnedHeroes(no2); setEquippedHero(hid);
+    AudioMgr.sfx("unlock");
+  }, [coins, ownedHeroes]);
+  const handleEquipHero = useCallback((hid) => {
+    setEquippedHero(hid); AudioMgr.sfx("save");
+  }, []);
+
+  const handleCfgChange = useCallback(nc => {
+    setCfg(nc); AudioMgr.setVol(nc.vol);
+  }, []);
+
+  return (
+    <>
+      {showCfg  && <SettingsModal s={cfg} onChange={handleCfgChange} onClose={()=>setShowCfg(false)} onQuit={scene==="game"?()=>{AudioMgr.stopMusic();setShowCfg(false);setScene("menu");}:null}/>}
+      {showShop && <Shop coins={coins} owned={owned} equipped={equipped} onBuy={handleBuy} onEquip={handleEquip} onClose={()=>setShowShop(false)}/>}
+      {showHeroShop && <HeroShop coins={coins} ownedHeroes={ownedHeroes} equippedHero={equippedHero} best={best} onBuy={handleBuyHero} onEquip={handleEquipHero} onClose={()=>setShowHeroShop(false)}/>}
+      {scene==="loading" && <div style={{position:"fixed",inset:0,background:"#04040f",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#4ade80",fontSize:16,fontFamily:"monospace"}}>Yükleniyor...</div></div>}
+      {scene==="menu"  && <Menu unlocked={unlocked} best={best} cfg={cfg} coins={coins} equippedCostume={activeCostume} activeHero={activeHero} dailyQuests={dailyQuests} stats={stats} onCfg={()=>setShowCfg(true)} onShop={()=>setShowShop(true)} onHeroShop={()=>setShowHeroShop(true)} onStart={play} onTutorial={()=>{AudioMgr.stopMusic();play(TUTORIAL_LEVEL,col);}}/>}
+      {scene==="game"  && <Game key={gKey} lv={lv} col={activeCostume ? activeCostume.col : col} btnSz={cfg.btnSz} cfg={cfg} activeCostume={activeCostume} activeHero={activeHero} onWin={handleWin} onDie={()=>setScene("death")} onBack={()=>setScene("menu")} onSettings={()=>setShowCfg(true)}/>}
+      {scene==="win"   && <WinScreen lv={lv} reward={lastReward} totalCoins={coins} bossCostume={bossCostume!=null?COSTUMES.find(c=>c.id===bossCostume):null} onReplay={()=>{setBossCostume(null);play(lv,col);}} onMenu={()=>{setBossCostume(null);setScene("menu");}} onNext={()=>{setBossCostume(null);const n=ALL[lv.id+1]; if(n)play(n,col); else setScene("menu");}}/>}
+      {scene==="death" && <DeathScreen lv={lv} onReplay={()=>play(lv,col)} onMenu={()=>setScene("menu")}/>}
+    </>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
+  </script>
+</body>
+</html>
